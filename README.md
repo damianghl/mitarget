@@ -82,3 +82,7 @@ tests/
 pytest -q
 ruff check .
 ```
+
+## License
+
+GPL-3.0, see [LICENSE](LICENSE).
