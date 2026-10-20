@@ -65,14 +65,18 @@ class GLMMFit:
     target_encoding: np.ndarray     # (kx, ky)
 
 
-def _conditional_modes(b0, sigma, k1, m, u0=None, n_iter=50):
-    """Newton for the mode of each level's random effect (the log-posterior is concave)."""
+def _conditional_modes(b0, sigma, k1, m, n_iter=200):
+    """
+    Newton for the mode of each level's random effect. The log-posterior is
+    concave, but a full step can overshoot into the flat logistic tail, so
+    steps are capped at 1 on the logit scale.
+    """
     s2 = sigma ** 2
-    u = np.zeros_like(k1, dtype=float) if u0 is None else u0.copy()
+    u = np.zeros_like(k1, dtype=float)
     for _ in range(n_iter):
         p = expit(b0 + u)
         hess = m * p * (1 - p) + 1 / s2
-        step = (k1 - m * p - u / s2) / hess
+        step = np.clip((k1 - m * p - u / s2) / hess, -1.0, 1.0)
         u += step
         if np.max(np.abs(step)) < 1e-10:
             break

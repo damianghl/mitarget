@@ -25,6 +25,13 @@ def test_glmm_recovers_parameters():
     assert np.allclose(f.target_encoding.sum(axis=1), 1)
 
 
+def test_glmm_large_level_far_from_intercept():
+    # 228 of 319 against a rare-class intercept: a full Newton step from u = 0 overshoots
+    n = _binary_counts(np.r_[228, np.zeros(400, int), np.ones(40, int)], np.r_[319, np.full(440, 3)])
+    f = fit_glmm(n)
+    assert abs(f.target_encoding[0, 1] - 228 / 319) < 0.03
+
+
 def test_glmm_unseen_and_shrinkage():
     n = _binary_counts(np.array([0, 3, 0, 10]), np.array([0, 3, 2, 20]))
     f = fit_glmm(n)
