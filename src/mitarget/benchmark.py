@@ -22,6 +22,7 @@ from sklearn.preprocessing import TargetEncoder
 
 from .core import counts_from_labels, labels_from_counts, qhat_y
 from .crp import DEFAULT_ALPHA_INIT, DEFAULT_ALPHA_PRIOR
+from .competitors import catboost_classifier_encoding
 from .encoders import fit_counts
 from .metrics import excess_cross_entropy, heldout_log_loss
 from .synthetic.generative import GroundTruth, observe
@@ -61,9 +62,24 @@ def _from_counts(method: str, **kwargs) -> Method:
     return run
 
 
+def catboost_available() -> bool:
+    try:
+        import catboost  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 def standard_methods(mixture_ks=(2, 3), crp: bool = True, crp_kwargs: dict | None = None,
-                     fixed_m: float = 20.0, sklearn: bool = True) -> dict[str, Method]:
-    """The method line-up of the original experiments, in display order."""
+                     fixed_m: float = 20.0, sklearn: bool = True, competitors: bool = True,
+                     catboost: bool | None = None) -> dict[str, Method]:
+    """
+    The method line-up of the original experiments, in display order.
+
+    ``competitors`` adds the GLMM, NPMLE and CatBoost target-statistic
+    encoders; ``catboost`` the full CatBoost classifier (default: when the
+    ``catboost`` package is installed).
+    """
     methods: dict[str, Method] = {
         "Plug-in": _from_counts("plugin"),
         f"Fixed m={fixed_m:g}": _from_counts("fixed_m", m=fixed_m),
@@ -76,6 +92,13 @@ def standard_methods(mixture_ks=(2, 3), crp: bool = True, crp_kwargs: dict | Non
         methods[f"K={K} mixture"] = _from_counts("mixture", n_components=K, random_state=K)
     if crp:
         methods["CRP (self-tuned)"] = _from_counts("crp", crp_kwargs=crp_kwargs or CRP_FAST)
+    if competitors:
+        methods["GLMM"] = _from_counts("glmm")
+        methods["NPMLE"] = _from_counts("npmle")
+        methods["CatBoost TS (a=1)"] = _from_counts("catboost_ts")
+    if catboost if catboost is not None else (competitors and catboost_available()):
+        methods["CatBoost classifier"] = (
+            lambda n, x, y: (catboost_classifier_encoding(x, y, *n.shape), float("nan")))
     return methods
 
 

@@ -27,6 +27,14 @@ Metrics: MI error `I_hat - I_true` and excess cross-entropy
 `E_x[KL(q_true(y|x) || q_hat(y|x))]`, in nats. All methods and oracles are
 scored on the same draws.
 
+## Competitors
+
+Both scripts also run the encoders of `mitarget.competitors`: the GLMM encoder
+(best overall in Pargent et al. 2022), the Kiefer-Wolfowitz NPMLE prior, the
+CatBoost test-time target statistic and, when `catboost` is installed, the full
+CatBoost classifier on the single feature. Skip them with `--no-competitors`,
+or only the CatBoost classifier with `--no-catboost`.
+
 ## Real data
 
 The ARFF files are the ones in `code_new.zip/code/data/` (OpenML exports). They

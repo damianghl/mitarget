@@ -7,6 +7,10 @@ two discrete, asymmetric variables with limited samples", Entropy 21(6):623.
 """
 
 from .baseline import BaselineFit, fit_baseline
+from .competitors import (
+    GLMMFit, NPMLEFit, catboost_classifier_encoding, catboost_ts_encoding, fit_glmm, fit_npmle,
+    ordered_target_statistics,
+)
 from .core import counts_from_labels, fixed_m_encoding, plugin_information, plugin_target_encoding, qhat_y
 from .crp import CRPFit, fit_crp_mixture
 from .encoders import (
@@ -22,6 +26,8 @@ __all__ = [
     "BaselineFit", "fit_baseline",
     "counts_from_labels", "fixed_m_encoding", "plugin_information", "plugin_target_encoding",
     "qhat_y",
+    "GLMMFit", "NPMLEFit", "catboost_classifier_encoding", "catboost_ts_encoding", "fit_glmm",
+    "fit_npmle", "ordered_target_statistics",
     "CRPFit", "fit_crp_mixture",
     "METHODS", "BayesianCategoricalClassifier", "BayesianTargetEncoder", "EncodingFit",
     "fit_counts", "mutual_information",

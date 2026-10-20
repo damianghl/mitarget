@@ -20,6 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7", "ruff>=0.4"]
 plots = ["matplotlib>=3.6"]
+catboost = ["catboost>=1.2"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

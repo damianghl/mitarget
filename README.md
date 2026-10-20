@@ -28,8 +28,15 @@ learned from coincidences in the data instead of hand-picked.
 | `"crp"` | Chinese Restaurant Process over clusters, self-tuning concentration | collapsed Gibbs |
 | `"fixed_m"` | additive smoothing with fixed `m` (default 20) | none, for comparison |
 | `"plugin"` | raw frequencies | none, for comparison |
+| `"glmm"` | random-intercept logistic GLMM, `logit q_x = b0 + u_x` (Pargent et al. 2022) | Laplace marginal likelihood, as lme4 |
+| `"npmle"` | nonparametric prior for `q_x` on a grid (Kiefer-Wolfowitz) | EM |
+| `"catboost_ts"` | CatBoost target statistic at prediction time, `(n_xy + q_y) / (n_x + 1)` | none, for comparison |
 
-Every estimator handles any number of target classes.
+Every estimator handles any number of target classes; `"glmm"` and `"npmle"`
+are binary models fit one-vs-rest for `ky > 2`. `ordered_target_statistics`
+gives CatBoost's ordered encoding of training rows, and
+`catboost_classifier_encoding` the full CatBoost classifier on one feature
+(`pip install -e ".[catboost]"`).
 
 ## Install
 
@@ -67,6 +74,7 @@ src/mitarget/
   baseline.py        single-beta empirical-Bayes estimator
   finite_mixture.py  K-component mixture (EM)
   crp.py             CRP mixture (collapsed Gibbs, Escobar-West alpha updates)
+  competitors.py     GLMM, NPMLE and CatBoost encoders from the literature
   encoders.py        scikit-learn encoder and classifier
   metrics.py         exact MI, excess cross-entropy, held-out log-loss
   datasets.py        ARFF reader and real-data loaders
