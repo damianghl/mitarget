@@ -80,10 +80,18 @@ def _conditional_modes(b0, sigma, k1, m, u0=None, n_iter=50):
     return u, m * p * (1 - p) + 1 / s2
 
 
+#: Standardized grid for levels whose posterior is wide on the prior scale.
+_Z_GRID = np.linspace(-8.0, 8.0, 1601)
+
+
 def _glmm_loglik(b0, sigma, k1, m, mult, n_agq):
     """
-    Marginal log-likelihood by adaptive Gauss-Hermite quadrature around each
-    level's mode (``n_agq = 1`` is the Laplace approximation).
+    Marginal log-likelihood of the random-intercept model. Levels whose
+    posterior is narrow compared with the prior (informative data) use
+    ``n_agq`` adaptive Gauss-Hermite nodes around their mode (``n_agq = 1``
+    is the Laplace approximation); the rest, typically small all-0 or all-1
+    levels at large ``sigma``, where the posterior is one-sided, are
+    integrated on a dense grid of the prior.
     """
     u, hess = _conditional_modes(b0, sigma, k1, m)
     z, w = np.polynomial.hermite.hermgauss(n_agq)
@@ -93,6 +101,12 @@ def _glmm_loglik(b0, sigma, k1, m, mult, n_agq):
     g = (k1[:, None] * eta - m[:, None] * np.logaddexp(0, eta) - uu ** 2 / (2 * sigma ** 2)
          - 0.5 * np.log(2 * np.pi * sigma ** 2) + z[None, :] ** 2)
     ll = logsumexp(g, b=w[None, :], axis=1) + np.log(scale[:, 0])
+    wide = scale[:, 0] > 0.15 * sigma
+    if n_agq > 1 and wide.any():
+        eta = b0 + sigma * _Z_GRID[None, :]
+        g = (k1[wide, None] * eta - m[wide, None] * np.logaddexp(0, eta) - _Z_GRID[None, :] ** 2 / 2
+             - 0.5 * np.log(2 * np.pi))
+        ll[wide] = logsumexp(g, axis=1) + np.log(_Z_GRID[1] - _Z_GRID[0])
     return float(np.sum(mult * ll))
 
 
@@ -115,10 +129,10 @@ def _fit_glmm_binary(k1: np.ndarray, m: np.ndarray, n_agq: int = 1):
 def fit_glmm(n: np.ndarray, n_agq: int = 15) -> GLMMFit:
     """
     Random-intercept logistic GLMM on a ``(kx, ky)`` count matrix (one-vs-rest
-    for ``ky > 2``). The marginal likelihood uses ``n_agq`` adaptive
-    Gauss-Hermite nodes per level; ``n_agq=1`` is lme4's default Laplace
-    approximation, which with mostly single-observation levels can pick a
-    spuriously large ``sigma``.
+    for ``ky > 2``). The marginal likelihood is integrated numerically (see
+    :func:`_glmm_loglik`); ``n_agq=1`` is lme4's default Laplace
+    approximation instead, which with mostly single-observation levels can
+    pick a spuriously large ``sigma``.
     """
     n = np.asarray(n, dtype=float)
 
