@@ -39,6 +39,10 @@ def main(argv=None):
                     help="2 folds, shorter CRP chains, CRP only up to kx=500")
     ap.add_argument("--crp-max-kx", type=int, default=None,
                     help="skip CRP above this cardinality (default 8000, fast 500)")
+    ap.add_argument("--no-competitors", action="store_true",
+                    help="skip the GLMM, NPMLE and CatBoost competitors")
+    ap.add_argument("--no-catboost", action="store_true",
+                    help="skip the full CatBoost classifier (used by default when installed)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, default=None, help="directory for raw and summary CSVs")
     args = ap.parse_args(argv)
@@ -53,7 +57,9 @@ def main(argv=None):
         use_crp = task.kx <= crp_max_kx
         print(f"\n== {task.label}: kx={task.kx}, ky={task.ky}, n={task.n}"
               f"{'' if use_crp else '  (CRP skipped)'}")
-        methods = standard_methods(crp=use_crp, crp_kwargs=crp_kwargs)
+        methods = standard_methods(crp=use_crp, crp_kwargs=crp_kwargs,
+                                   competitors=not args.no_competitors,
+                                   catboost=False if args.no_catboost else None)
         df = evaluate_cv(task.x, task.y, methods, n_splits=2 if args.fast else folds,
                          seed=args.seed, kx=task.kx, ky=task.ky)
         df.insert(0, "task", task.label)

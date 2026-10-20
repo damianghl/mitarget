@@ -54,13 +54,19 @@ def main(argv=None):
     ap.add_argument("--reps", type=int, default=None, help="repetitions per scenario (default 10, fast 3)")
     ap.add_argument("--crp-reps", type=int, default=None, help="repetitions for CRP (default 2, fast 1)")
     ap.add_argument("--no-crp", action="store_true")
+    ap.add_argument("--no-competitors", action="store_true",
+                    help="skip the GLMM, NPMLE and CatBoost competitors")
+    ap.add_argument("--no-catboost", action="store_true",
+                    help="skip the full CatBoost classifier (used by default when installed)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, default=None, help="directory for raw and summary CSVs")
     args = ap.parse_args(argv)
 
     reps = args.reps or (3 if args.fast else 10)
     crp_reps = args.crp_reps or (1 if args.fast else 2)
-    methods = standard_methods(crp=not args.no_crp, sklearn=False)
+    methods = standard_methods(crp=not args.no_crp, sklearn=False,
+                               competitors=not args.no_competitors,
+                               catboost=False if args.no_catboost else None)
 
     frames = []
     for key, label, gt, N, oracles in scenarios(args.fast):

@@ -24,11 +24,12 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.utils.validation import check_is_fitted
 
 from .baseline import fit_baseline
+from .competitors import catboost_ts_encoding, fit_glmm, fit_npmle
 from .core import counts_from_labels, fixed_m_encoding, plugin_information, plugin_target_encoding, qhat_y
 from .crp import fit_crp_mixture
 from .finite_mixture import fit_finite_mixture
 
-METHODS = ("baseline", "mixture", "crp", "fixed_m", "plugin")
+METHODS = ("baseline", "mixture", "crp", "fixed_m", "plugin", "glmm", "npmle", "catboost_ts")
 
 
 @dataclass
@@ -58,6 +59,14 @@ def fit_counts(n: np.ndarray, method: str = "baseline", *, n_components: int = 2
         return EncodingFit(fixed_m_encoding(n, m=m, qy=qy), qy, float("nan"), None)
     if method == "plugin":
         return EncodingFit(plugin_target_encoding(n), qy, plugin_information(n), None)
+    if method == "glmm":
+        f = fit_glmm(n)
+        return EncodingFit(f.target_encoding, f.qy, float("nan"), f)
+    if method == "npmle":
+        f = fit_npmle(n)
+        return EncodingFit(f.target_encoding, f.qy, f.I_hat, f)
+    if method == "catboost_ts":
+        return EncodingFit(catboost_ts_encoding(n), qy, float("nan"), None)
     raise ValueError(f"unknown method {method!r}; expected one of {METHODS}")
 
 
@@ -120,6 +129,9 @@ class BayesianTargetEncoder(_EstimatorParams, TransformerMixin, BaseEstimator):
         "mixture" a finite mixture with ``n_components`` betas; "crp" the
         self-tuning CRP mixture (slowest). "fixed_m" and "plugin" are the
         classic smoothed and unsmoothed encoders, for comparison.
+        "glmm", "npmle" and "catboost_ts" are the competitors in
+        :mod:`mitarget.competitors` (random-intercept GLMM, nonparametric
+        prior, CatBoost's test-time target statistic).
     n_components : int, number of mixture components for ``method="mixture"``.
     m : float, pseudo-count for ``method="fixed_m"``.
     n_init : int, EM restarts for ``method="mixture"``.
