@@ -3,9 +3,10 @@ Competing encoders from the target-encoding literature, on the same count
 matrix interface as the rest of the package.
 
 - :func:`fit_glmm`: random-intercept logistic GLMM, ``logit q_x = b0 + u_x``
-  with ``u_x ~ N(0, sigma^2)``, fit by Laplace-approximate marginal likelihood
-  (lme4's default); the encoding is ``expit(b0 + u_x)`` at the conditional
-  modes. This is the encoder Pargent et al. (2022) found best overall.
+  with ``u_x ~ N(0, sigma^2)``, fit by marginal likelihood (adaptive
+  Gauss-Hermite quadrature, or lme4's default Laplace approximation); the
+  encoding is ``expit(b0 + u_x)`` at the conditional modes. This is the
+  encoder Pargent et al. (2022) found best overall.
 - :func:`fit_npmle`: Kiefer-Wolfowitz nonparametric maximum-likelihood prior
   for ``q_x`` on a grid (binomial mixture, fit by EM); the encoding is the
   posterior mean. It estimates the whole prior instead of a beta's two moments.
@@ -27,7 +28,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy.optimize import minimize
-from scipy.special import entr, expit, logit
+from scipy.special import entr, expit, logit, logsumexp
 from scipy.stats import binom
 
 from .core import entropy, posterior_mean_conditional, qhat_y
@@ -79,19 +80,28 @@ def _conditional_modes(b0, sigma, k1, m, u0=None, n_iter=50):
     return u, m * p * (1 - p) + 1 / s2
 
 
-def _glmm_laplace_loglik(b0, sigma, k1, m, mult):
+def _glmm_loglik(b0, sigma, k1, m, mult, n_agq):
+    """
+    Marginal log-likelihood by adaptive Gauss-Hermite quadrature around each
+    level's mode (``n_agq = 1`` is the Laplace approximation).
+    """
     u, hess = _conditional_modes(b0, sigma, k1, m)
-    eta = b0 + u
-    ll = k1 * eta - m * np.logaddexp(0, eta) - u ** 2 / (2 * sigma ** 2) - 0.5 * np.log(sigma ** 2 * hess)
+    z, w = np.polynomial.hermite.hermgauss(n_agq)
+    scale = np.sqrt(2 / hess)[:, None]
+    uu = u[:, None] + scale * z[None, :]
+    eta = b0 + uu
+    g = (k1[:, None] * eta - m[:, None] * np.logaddexp(0, eta) - uu ** 2 / (2 * sigma ** 2)
+         - 0.5 * np.log(2 * np.pi * sigma ** 2) + z[None, :] ** 2)
+    ll = logsumexp(g, b=w[None, :], axis=1) + np.log(scale[:, 0])
     return float(np.sum(mult * ll))
 
 
-def _fit_glmm_binary(k1: np.ndarray, m: np.ndarray):
+def _fit_glmm_binary(k1: np.ndarray, m: np.ndarray, n_agq: int = 1):
     seen, gk1, gm, mult, inverse = _binary_groups(k1, m)
     rate = np.clip(k1.sum() / m.sum(), 1e-6, 1 - 1e-6)
 
     def objective(theta):
-        return -_glmm_laplace_loglik(theta[0], np.exp(theta[1]), gk1, gm, mult)
+        return -_glmm_loglik(theta[0], np.exp(theta[1]), gk1, gm, mult, n_agq)
 
     res = minimize(objective, x0=[float(logit(rate)), 0.0], method="L-BFGS-B",
                    bounds=[(-30, 30), LOG_SIGMA_BOUNDS])
@@ -102,13 +112,23 @@ def _fit_glmm_binary(k1: np.ndarray, m: np.ndarray):
     return p, float(expit(b0)), (b0, sigma)
 
 
-def fit_glmm(n: np.ndarray) -> GLMMFit:
-    """Random-intercept logistic GLMM on a ``(kx, ky)`` count matrix (one-vs-rest for ``ky > 2``)."""
+def fit_glmm(n: np.ndarray, n_agq: int = 15) -> GLMMFit:
+    """
+    Random-intercept logistic GLMM on a ``(kx, ky)`` count matrix (one-vs-rest
+    for ``ky > 2``). The marginal likelihood uses ``n_agq`` adaptive
+    Gauss-Hermite nodes per level; ``n_agq=1`` is lme4's default Laplace
+    approximation, which with mostly single-observation levels can pick a
+    spuriously large ``sigma``.
+    """
     n = np.asarray(n, dtype=float)
+
+    def fit_binary(k1, m):
+        return _fit_glmm_binary(k1, m, n_agq=n_agq)
+
     if n.shape[1] == 2:
-        p1, unseen, (b0, sigma) = _fit_glmm_binary(n[:, 1], n.sum(axis=1))
+        p1, unseen, (b0, sigma) = fit_binary(n[:, 1], n.sum(axis=1))
         return GLMMFit(b0, sigma, np.array([1 - unseen, unseen]), np.stack([1 - p1, p1], axis=1))
-    enc, unseen, params = _one_vs_rest(n, _fit_glmm_binary)
+    enc, unseen, params = _one_vs_rest(n, fit_binary)
     return GLMMFit(np.array([b for b, _ in params]), np.array([s for _, s in params]), unseen, enc)
 
 

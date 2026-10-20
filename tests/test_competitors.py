@@ -99,3 +99,12 @@ def test_catboost_classifier_in_cv():
     df = evaluate_cv(x, y, {"cb": standard_methods(mixture_ks=(), crp=False, catboost=True)
                             ["CatBoost classifier"]}, n_splits=2)
     assert np.isfinite(df.logloss).all()
+
+
+def test_glmm_quadrature_avoids_laplace_blowup_on_singletons():
+    rng = np.random.default_rng(0)
+    m = np.repeat([1, 2, 3], [3800, 500, 60])
+    n = _binary_counts(rng.binomial(m, 0.15), m)
+    laplace, agq = fit_glmm(n, n_agq=1), fit_glmm(n)
+    assert laplace.sigma > 2 and abs(laplace.qy[1] - 0.15) > 0.08
+    assert agq.sigma < 1 and abs(agq.qy[1] - 0.15) < 0.02
