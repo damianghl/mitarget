@@ -24,12 +24,13 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.utils.validation import check_is_fitted
 
 from .baseline import fit_baseline
-from .competitors import catboost_ts_encoding, fit_glmm, fit_npmle
+from .competitors import _one_vs_rest, catboost_ts_encoding, fit_glmm, fit_npmle
 from .core import counts_from_labels, fixed_m_encoding, plugin_information, plugin_target_encoding, qhat_y
 from .crp import fit_crp_mixture
 from .finite_mixture import fit_finite_mixture
+from .freq_prior import fit_freq_prior
 
-METHODS = ("baseline", "mixture", "crp", "fixed_m", "plugin", "glmm", "npmle", "catboost_ts")
+METHODS = ("baseline", "mixture", "crp", "fixed_m", "plugin", "glmm", "npmle", "catboost_ts", "freq_prior")
 
 
 @dataclass
@@ -67,7 +68,18 @@ def fit_counts(n: np.ndarray, method: str = "baseline", *, n_components: int = 2
         return EncodingFit(f.target_encoding, f.qy, f.I_hat, f)
     if method == "catboost_ts":
         return EncodingFit(catboost_ts_encoding(n), qy, float("nan"), None)
+    if method == "freq_prior":
+        if n.shape[1] == 2:
+            f = fit_freq_prior(n)
+            return EncodingFit(f.target_encoding, f.qy, f.I_hat, f)
+        enc, unseen, fits = _one_vs_rest(n, _freq_prior_binary)
+        return EncodingFit(enc, unseen, float("nan"), fits)
     raise ValueError(f"unknown method {method!r}; expected one of {METHODS}")
+
+
+def _freq_prior_binary(k1, m):
+    f = fit_freq_prior(np.stack([m - k1, k1], axis=1))
+    return f.target_encoding[:, 1], f.qy[1], f
 
 
 def mutual_information(x, y, method: str = "baseline", **kwargs) -> float:
@@ -131,7 +143,11 @@ class BayesianTargetEncoder(_EstimatorParams, TransformerMixin, BaseEstimator):
         classic smoothed and unsmoothed encoders, for comparison.
         "glmm", "npmle" and "catboost_ts" are the competitors in
         :mod:`mitarget.competitors` (random-intercept GLMM, nonparametric
-        prior, CatBoost's test-time target statistic).
+        prior, CatBoost's test-time target statistic). "freq_prior" lets the
+        prior mean depend on the category's count (:mod:`mitarget.freq_prior`;
+        binary targets only), and unseen categories get its prediction at
+        count 0 instead of the marginal. It is a binary model, fit
+        one-vs-rest for ``ky > 2`` classes.
     n_components : int, number of mixture components for ``method="mixture"``.
     m : float, pseudo-count for ``method="fixed_m"``.
     n_init : int, EM restarts for ``method="mixture"``.
