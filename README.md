@@ -31,12 +31,40 @@ learned from coincidences in the data instead of hand-picked.
 | `"glmm"` | random-intercept logistic GLMM, `logit q_x = b0 + u_x` (Pargent et al. 2022) | Laplace marginal likelihood, as lme4 |
 | `"npmle"` | nonparametric prior for `q_x` on a grid (Kiefer-Wolfowitz) | EM |
 | `"catboost_ts"` | CatBoost target statistic at prediction time, `(n_xy + q_y) / (n_x + 1)` | none, for comparison |
+| `"freq_prior"` | beta prior whose mean depends on the category's count, `logit mu_x = a + b log(1 + n_x)` (binary `y`) | type-II ML, used only if a likelihood-ratio test rejects `b = 0` |
 
-Every estimator handles any number of target classes; `"glmm"` and `"npmle"`
-are binary models fit one-vs-rest for `ky > 2`. `ordered_target_statistics`
+Every estimator handles any number of target classes; `"glmm"`, `"npmle"` and
+`"freq_prior"` are binary models fit one-vs-rest for `ky > 2`. `ordered_target_statistics`
 gives CatBoost's ordered encoding of training rows, and
 `catboost_classifier_encoding` the full CatBoost classifier on one feature
 (`pip install -e ".[catboost]"`).
+
+When the target rate depends on how popular a category is, the frequency prior
+recovers most of the gap to the oracle. The encoding reads the fitted curve at
+`n_x + 1`, since the right prior for a category seen `n` times is the law of
+`q` among categories seen `n + 1` times; unseen categories therefore get
+roughly the label rate of singletons. The MI estimate uses the curve at `n_x`.
+
+## Mutual information: point estimate and identified interval
+
+Categories seen at most `L` times identify only the first `L` moments of the
+prior of `q(y=1 | x)`, so `I(X;Y)` is only partially identified: singletons
+alone give `[0, H(Y)]`, and the worst-case half-width is about `0.22 / L^2`
+nats. `mi_interval` returns that interval from a binary count matrix (two
+linear programmes per value of the label rate, with the estimated moments
+allowed to vary within `slack` standard errors); the beta estimators return one
+point inside it.
+
+```python
+from mitarget import counts_from_labels, fit_baseline, mi_interval
+
+n = counts_from_labels(x_codes, y_codes)
+fit_baseline(n).I_hat          # point estimate under the beta prior
+r = mi_interval(n)             # r.lower, r.upper, r.midpoint, r.L
+```
+
+`identified_interval(moments)` gives the population interval for known
+moments, and `worst_case_halfwidth(L)` the bound `E_L(h)`.
 
 ## Install
 
@@ -75,6 +103,8 @@ src/mitarget/
   finite_mixture.py  K-component mixture (EM)
   crp.py             CRP mixture (collapsed Gibbs, Escobar-West alpha updates)
   competitors.py     GLMM, NPMLE and CatBoost encoders from the literature
+  freq_prior.py      frequency-aware prior (prior mean depends on the category's count)
+  mi_interval.py     moment-identified interval for I(X;Y)
   encoders.py        scikit-learn encoder and classifier
   metrics.py         exact MI, excess cross-entropy, held-out log-loss
   datasets.py        ARFF reader and real-data loaders

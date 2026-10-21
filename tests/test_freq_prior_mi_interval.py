@@ -1,0 +1,112 @@
+import numpy as np
+import pytest
+from scipy.special import expit
+
+from mitarget import (
+    BayesianTargetEncoder, fit_counts, fit_freq_prior, identified_interval, mi_interval,
+    moment_estimates, worst_case_halfwidth,
+)
+from mitarget.metrics import exact_mutual_information, excess_cross_entropy
+
+
+def _popularity_sample(N, link, seed, K=50_000):
+    """Levels with lognormal popularity; logit q rises with log popularity when ``link`` > 0."""
+    rng = np.random.default_rng(seed)
+    logp = rng.normal(0, 1.5, K)
+    p = np.exp(logp) / np.exp(logp).sum()
+    q = expit(-0.5 + link * (logp - logp.mean()) + rng.normal(0, 1, K))
+    level = rng.choice(K, size=N, p=p)
+    y = rng.random(N) < q[level]
+    k = np.bincount(level, weights=y, minlength=K)
+    nx = np.bincount(level, minlength=K)
+    return np.stack([nx - k, k], axis=1).astype(float), p, np.stack([1 - q, q], axis=1)
+
+
+def test_freq_prior_beats_baseline_with_popularity_link():
+    n, p, q = _popularity_sample(25_000, link=0.6, seed=0)
+    f = fit_freq_prior(n)
+    assert f.selected and f.p_value < 1e-6
+    base = fit_counts(n, "baseline").encoding
+    assert excess_cross_entropy(p, q, f.target_encoding) < excess_cross_entropy(p, q, base) - 0.005
+    assert np.allclose(f.target_encoding.sum(axis=1), 1)
+    # unseen levels get the shifted curve at n = 0, close to the singletons' label rate
+    single = n.sum(axis=1) == 1
+    assert abs(f.qy[1] - n[single, 1].mean()) < 0.03
+    assert np.allclose(f.target_encoding[n.sum(axis=1) == 0], f.qy)
+
+
+def test_freq_prior_falls_back_without_link():
+    n, _, _ = _popularity_sample(25_000, link=0.0, seed=1)
+    f = fit_freq_prior(n)
+    base = fit_counts(n, "baseline")
+    assert f.p_value > 0.01
+    if not f.selected:
+        assert np.allclose(f.target_encoding, base.encoding)
+        assert f.I_hat == base.I_hat
+    assert fit_freq_prior(n, lr_test=False).selected
+
+
+def test_freq_prior_shift_and_linear_spread():
+    n, _, _ = _popularity_sample(25_000, link=0.6, seed=2)
+    f = fit_freq_prior(n, spread="linear")
+    assert len(f.params) == 4 and f.selected
+    k, nx = n[:, 1], n.sum(axis=1)
+    assert np.allclose(f.predict(k, nx), f.target_encoding[:, 1])
+    assert not np.allclose(f.predict(k, nx, shift=0), f.predict(k, nx))
+    mu1, _ = f.prior(np.array([0.0]), shift=1)
+    mu0, _ = f.prior(np.array([1.0]), shift=0)
+    assert np.isclose(mu1[0], mu0[0])
+
+
+def test_freq_prior_rejects_multiclass_and_works_in_encoder():
+    with pytest.raises(ValueError):
+        fit_freq_prior(np.ones((5, 3)))
+    rng = np.random.default_rng(3)
+    x = rng.integers(0, 300, 3000)
+    y = rng.random(3000) < expit(0.1 * (x % 7))
+    out = BayesianTargetEncoder(method="freq_prior", cv=3, random_state=0).fit_transform(x[:, None], y)
+    assert out.shape == (3000, 1) and np.all((out > 0) & (out < 1))
+
+
+def _atoms_moments(atoms, w, L):
+    return np.array([np.sum(np.asarray(w) * np.asarray(atoms) ** j) for j in range(1, L + 1)])
+
+
+def test_identified_interval_known_values():
+    atoms, w = [0.1, 0.5, 0.9], [0.25, 0.5, 0.25]
+    m = _atoms_moments(atoms, w, 4)
+    lo, hi = identified_interval(m[:1])
+    assert lo == pytest.approx(0, abs=1e-9) and hi == pytest.approx(np.log(2))
+    lo, hi = identified_interval(m[:2])           # population interval in unseen_mi_limits
+    assert lo == pytest.approx(0.170, abs=1e-3) and hi == pytest.approx(0.222, abs=1e-3)
+    q = np.array(atoms)
+    true_I = exact_mutual_information(np.array(w), np.stack([1 - q, q], axis=1))
+    for L in (2, 3, 4):
+        lo, hi = identified_interval(m[:L])
+        assert lo - 1e-6 <= true_I <= hi + 1e-6
+
+
+def test_worst_case_halfwidth():
+    e = [worst_case_halfwidth(L) for L in (1, 2, 4, 8)]
+    assert e[0] == pytest.approx(np.log(2) / 2, abs=1e-6)
+    assert all(a > b for a, b in zip(e[:-1], e[1:], strict=True))
+    assert 64 * e[3] == pytest.approx(0.22, abs=0.02)
+
+
+def test_mi_interval_from_data_covers_truth():
+    rng = np.random.default_rng(4)
+    atoms, w = np.array([0.1, 0.5, 0.9]), np.array([0.25, 0.5, 0.25])
+    q = rng.choice(atoms, size=200_000, p=w)
+    nx = rng.poisson(1.0, q.size)
+    k = rng.binomial(nx, q)
+    n = np.stack([nx - k, k], axis=1).astype(float)
+    m, se, used = moment_estimates(n, 3)
+    assert np.allclose(m, _atoms_moments(atoms, w, 3), atol=4 * se)
+    assert used[0] == np.sum(nx >= 1)
+    r = mi_interval(n, L=2)
+    true_I = exact_mutual_information(w, np.stack([1 - atoms, atoms], axis=1))
+    assert r.lower <= true_I <= r.upper
+    assert r.width < 0.1 and r.lower <= r.midpoint <= r.upper
+    r0 = mi_interval(n, L=2, slack=0)
+    assert r.lower <= r0.lower <= r0.upper <= r.upper
+    assert mi_interval(n, max_L=3).L == 3
