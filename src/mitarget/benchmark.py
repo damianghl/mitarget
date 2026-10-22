@@ -72,14 +72,16 @@ def catboost_available() -> bool:
 
 def standard_methods(mixture_ks=(2, 3), crp: bool = True, crp_kwargs: dict | None = None,
                      fixed_m: float = 20.0, sklearn: bool = True, competitors: bool = True,
-                     catboost: bool | None = None, freq_prior: bool = False) -> dict[str, Method]:
+                     catboost: bool | None = None, freq_prior: bool = False,
+                     unseen_correction: bool = False) -> dict[str, Method]:
     """
     The method line-up of the original experiments, in display order.
 
     ``competitors`` adds the GLMM, NPMLE and CatBoost target-statistic
     encoders; ``catboost`` the full CatBoost classifier (default: when the
     ``catboost`` package is installed). ``freq_prior`` adds the
-    frequency-aware prior (binary targets only).
+    frequency-aware prior (binary targets only); ``unseen_correction`` the
+    baseline with the singleton rate for unseen categories.
     """
     methods: dict[str, Method] = {
         "Plug-in": _from_counts("plugin"),
@@ -89,6 +91,8 @@ def standard_methods(mixture_ks=(2, 3), crp: bool = True, crp_kwargs: dict | Non
         methods["sklearn TargetEncoder (auto)"] = (
             lambda n, x, y: (sklearn_target_encoding(x, y, *n.shape), float("nan")))
     methods["K=1 baseline"] = _from_counts("baseline")
+    if unseen_correction:
+        methods["Baseline + unseen correction"] = _from_counts("baseline_unseen")
     if freq_prior:
         methods["Frequency prior"] = _from_counts("freq_prior")
     for K in mixture_ks:

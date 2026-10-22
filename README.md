@@ -24,6 +24,7 @@ learned from coincidences in the data instead of hand-picked.
 | `method` | Model | Fit |
 |---|---|---|
 | `"baseline"` | one shared `beta` | empirical Bayes (1-D optimization) |
+| `"baseline_unseen"` | the baseline, but unseen categories get the label rate of categories seen once (`singleton_rate`) | as baseline |
 | `"mixture"` | `K` clusters of categories, each with its own `beta_c` | EM with restarts |
 | `"crp"` | Chinese Restaurant Process over clusters, self-tuning concentration | collapsed Gibbs |
 | `"fixed_m"` | additive smoothing with fixed `m` (default 20) | none, for comparison |

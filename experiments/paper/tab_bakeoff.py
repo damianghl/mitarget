@@ -1,88 +1,73 @@
 """
 Tables for Section 7.3: held-out log-loss of single-feature encoders on the real data.
 
-Reads ``table_main.csv`` from the paired real-data rerun (experiments/realdata_tables.py): one row per
-task with the baseline's gain over the prior-only predictor and, per method, its log-loss minus the
-baseline's as a share of that gain (negative = better), the Holm-adjusted p of the corrected
-resampled t-test, and the share of the difference that comes from test rows on unseen levels.
-Writes the main-text table (representative sparse features) and the full appendix table.
+Reads ``table_paired.csv`` and ``table_logloss.csv`` written by ``experiments/realdata_tables.py``
+(5 x 5 repeated folds) and writes a LaTeX table with the baseline's gain over the prior-only
+predictor and, for every other method, its log-loss minus the baseline's as a share of that gain
+(negative = better than the baseline), with the Nadeau-Bengio corrected standard error in brackets.
+Cells whose Holm-adjusted corrected p-value is below 0.05 carry a star.
 """
 
 import argparse
 import os
 
-import numpy as np
 import pandas as pd
 
-MAIN = [
+TASKS = [
     ("avazu/user", "Avazu user (ip+model)"),
     ("avazu/device_ip", "Avazu device\\_ip"),
     ("criteo/C1", "Criteo C1"),
     ("bx/user", "BX user, $r\\geq8$"),
     ("bx_explicit/user", "BX user, explicit"),
-    ("bx/isbn", "BX ISBN, $r\\geq8$"),
     ("amazon/MGR_ID", "Amazon MGR\\_ID"),
     ("amazon/RESOURCE", "Amazon RESOURCE"),
     ("employee_salaries/position_title", "employee\\_salaries$^\\dagger$"),
 ]
-METHODS = [("NPMLE", "NPMLE"), ("Frequency prior", "freq.\\ prior"), ("GLMM", "GLMM"),
-           ("Fixed m=20", "$m{=}20$")]
-ALPHA = 0.01
+METHODS = [("Baseline + unseen correction", "+unseen"), ("Frequency prior", "freq."), ("NPMLE", "NPMLE"),
+           ("GLMM", "GLMM"), ("CatBoost TS (a=1)", "CB TS"), ("Fixed m=20", "$m{=}20$"),
+           ("sklearn TargetEncoder (auto)", "sklearn")]
 
 
-def tex_name(task):
-    return task.replace("_", "\\_")
-
-
-def cell(row, m):
-    v, p = row[f"{m}: share"], row[f"{m}: p_holm"]
-    if not np.isfinite(v):
-        return "--"
-    txt = f"{100 * v:+.0f}" if abs(v) >= 1 else f"{100 * v:+.1f}"
-    return txt + ("$^{*}$" if p < ALPHA else "")
-
-
-def n0(row, m):
-    v = row[f"{m}: n0share"]
-    return f"{100 * v:.0f}\\%" if np.isfinite(v) and row[f"{m}: share"] < 0 and row[f"{m}: p_holm"] < ALPHA \
-        else "--"
-
-
-def table(df, tasks, with_n0):
-    head = ["feature", "$N$", "$k_x$", "$\\frac{F_1+2F_2}{N}$", "gain"] + [lab for _, lab in METHODS]
-    if with_n0:
-        head += ["NPMLE at $n_x{=}0$", "freq.\\ at $n_x{=}0$"]
-    lines = []
-    for task, label in tasks:
-        r = df.loc[task]
-        cells = [label, f"{r.N / 1e3:,.0f}k" if r.N < 1e6 else f"{r.N / 1e6:.1f}M",
-                 f"{r.kx:,.0f}", f"{r.F1_2F2_share:.2f}", f"{r.baseline_gain:.4f}"]
-        cells += [cell(r, m) for m, _ in METHODS]
-        if with_n0:
-            cells += [n0(r, "NPMLE"), n0(r, "Frequency prior")]
-        best = min((r[f"{m}: share"], i) for i, (m, _) in enumerate(METHODS) if np.isfinite(r[f"{m}: share"]))
-        if best[0] < 0 and r[f"{METHODS[best[1]][0]}: p_holm"] < ALPHA:
-            cells[5 + best[1]] = "\\textbf{" + cells[5 + best[1]] + "}"
-        lines.append(" & ".join(cells) + " \\\\")
-    return "\n".join(["\\begin{tabular}{l rrrr " + "r" * (len(head) - 5) + "}", "\\toprule",
-                      " & ".join(head) + " \\\\", "\\midrule", *lines, "\\bottomrule", "\\end{tabular}", ""])
+def cell(v, se, star):
+    if abs(v) >= 100:
+        return f"{v:+.0f}"
+    se_txt = "$<$0.1" if se < 0.05 else f"{se:.1f}"
+    return f"{v:+.1f}{'$^*$' if star else ''} ({se_txt})"
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("table_main", help="table_main.csv from experiments/realdata_tables.py")
-    ap.add_argument("--out-dir", default=".")
+    ap.add_argument("tables_dir", help="output folder of experiments/realdata_tables.py")
+    ap.add_argument("--out", default="tab_bakeoff.tex")
     a = ap.parse_args()
-    df = pd.read_csv(a.table_main).set_index("task")
-    with open(os.path.join(a.out_dir, "tab_bakeoff.tex"), "w") as fh:
-        fh.write(table(df, MAIN, with_n0=True))
-    with open(os.path.join(a.out_dir, "tab_bakeoff_full.tex"), "w") as fh:
-        fh.write(table(df, [(t, tex_name(t)) for t in df.index], with_n0=False))
-    for task, _ in MAIN:
-        r = df.loc[task]
-        parts = [f"{m}={100 * r[f'{m}: share']:+.1f} p={r[f'{m}: p_holm']:.1e} n0={r[f'{m}: n0share']:.2f}"
-                 for m, _ in METHODS]
-        print(task, " | ".join(parts))
+    paired = pd.read_csv(os.path.join(a.tables_dir, "table_paired.csv"))
+    ll = pd.read_csv(os.path.join(a.tables_dir, "table_logloss.csv"))
+    paired = paired[paired.reference == "K=1 baseline"].set_index(["task", "method"])
+    gains = ll[ll.method == "K=1 baseline"].set_index("task").gain
+    lines = []
+    for task, label in TASKS:
+        gain = gains[task]
+        cells, vals = [label, f"{gain:.4f}"], {}
+        for m, _ in METHODS:
+            if (task, m) not in paired.index:
+                cells.append("--")
+                continue
+            r = paired.loc[(task, m)]
+            v, se = 100 * r.diff / gain, 100 * r.se_nb / gain
+            vals[m] = v
+            cells.append(cell(v, se, r.p_nb_holm < 0.05))
+        best = min(vals, key=vals.get)
+        if vals[best] < 0:
+            i = 2 + [m for m, _ in METHODS].index(best)
+            cells[i] = "\\textbf{" + cells[i] + "}"
+        lines.append(" & ".join(cells) + " \\\\")
+        print(label, f"{gain:.4f}", {k: round(v, 1) for k, v in vals.items()})
+    head = " & ".join(["feature", "gain"] + [lab for _, lab in METHODS]) + " \\\\"
+    tex = "\n".join([
+        "\\begin{tabular}{l r " + "r" * len(METHODS) + "}",
+        "\\toprule", head, "\\midrule", *lines, "\\bottomrule", "\\end{tabular}", ""])
+    with open(a.out, "w") as fh:
+        fh.write(tex)
 
 
 if __name__ == "__main__":

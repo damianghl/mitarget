@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 # Fixed categorical order: a method keeps its colour in every figure.
 COLORS = {
     "baseline": "#2a78d6",
+    "unseen": "#7b4fc9",
     "freq": "#eb6834",
     "npmle": "#1baf7a",
     "fixed_m": "#eda100",
