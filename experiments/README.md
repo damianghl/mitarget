@@ -94,7 +94,8 @@ dependence). Input files are tab-separated with the feature column and a
 ## Coverage of the MI intervals
 
 ```bash
-python experiments/mi_coverage.py synthetic --reps 100 --jobs 4 --out mi_raw/        # about 1.5 h on 4 cores
+export OMP_NUM_THREADS=1   # one BLAS thread per worker; about 5x faster with --jobs 4
+python experiments/mi_coverage.py synthetic --reps 100 --jobs 4 --out mi_raw/        # about 50 min on 4 cores
 python experiments/mi_coverage.py oracle --data ml1m_ratings.tsv --feature movie_id --reps 50 --jobs 4 --out mi_raw/
 python experiments/mi_coverage.py oracle --data ml1m_ratings.tsv --feature movie_id --shuffle --reps 50 --jobs 4 --out mi_raw/
 python experiments/mi_coverage_tables.py --raw mi_raw/ --out mi_tables/
