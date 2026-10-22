@@ -23,14 +23,15 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 from sklearn.utils.validation import check_is_fitted
 
-from .baseline import fit_baseline
+from .baseline import fit_baseline, singleton_rate
 from .competitors import _one_vs_rest, catboost_ts_encoding, fit_glmm, fit_npmle
 from .core import counts_from_labels, fixed_m_encoding, plugin_information, plugin_target_encoding, qhat_y
 from .crp import fit_crp_mixture
 from .finite_mixture import fit_finite_mixture
 from .freq_prior import fit_freq_prior
 
-METHODS = ("baseline", "mixture", "crp", "fixed_m", "plugin", "glmm", "npmle", "catboost_ts", "freq_prior")
+METHODS = ("baseline", "baseline_unseen", "mixture", "crp", "fixed_m", "plugin", "glmm", "npmle",
+           "catboost_ts", "freq_prior")
 
 
 @dataclass
@@ -50,6 +51,12 @@ def fit_counts(n: np.ndarray, method: str = "baseline", *, n_components: int = 2
     if method == "baseline":
         f = fit_baseline(n, qy=qy)
         return EncodingFit(f.target_encoding, qy, f.I_hat, f)
+    if method == "baseline_unseen":
+        f = fit_baseline(n, qy=qy)
+        unseen = singleton_rate(n, qy)
+        enc = f.target_encoding.copy()
+        enc[n.sum(axis=1) == 0] = unseen
+        return EncodingFit(enc, unseen, f.I_hat, f)
     if method == "mixture":
         f = fit_finite_mixture(n, K=n_components, qy=qy, n_init=n_init, seed=random_state)
         return EncodingFit(f.target_encoding, qy, f.I_hat, f)
@@ -138,6 +145,8 @@ class BayesianTargetEncoder(_EstimatorParams, TransformerMixin, BaseEstimator):
     ----------
     method : {"baseline", "mixture", "crp", "fixed_m", "plugin"}
         "baseline" is the single-beta estimator of Hernandez & Samengo (2019);
+        "baseline_unseen" is the same with the unseen correction: categories
+        not seen in training get the label rate of the categories seen once;
         "mixture" a finite mixture with ``n_components`` betas; "crp" the
         self-tuning CRP mixture (slowest). "fixed_m" and "plugin" are the
         classic smoothed and unsmoothed encoders, for comparison.

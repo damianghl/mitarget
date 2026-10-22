@@ -33,6 +33,7 @@ import pandas as pd
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold
 
+from mitarget.benchmark import sklearn_target_encoding
 from mitarget.core import counts_from_labels, qhat_y
 from mitarget.encoders import fit_counts
 
@@ -40,15 +41,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from realdata_tasks import GROUPS  # noqa: E402
 
 BASELINE = "K=1 baseline"
+UNSEEN = "Baseline + unseen correction"
 
-#: name -> function of the training count matrix returning a (kx, ky) encoding
+#: name -> function of the training count matrix and training labels returning a (kx, ky) encoding
 METHODS = {
-    "Prior only": lambda n: np.tile(qhat_y(n), (n.shape[0], 1)),
-    "Fixed m=20": lambda n: fit_counts(n, "fixed_m", m=20.0).encoding,
-    BASELINE: lambda n: fit_counts(n, "baseline").encoding,
-    "Frequency prior": lambda n: fit_counts(n, "freq_prior").encoding,
-    "GLMM": lambda n: fit_counts(n, "glmm").encoding,
-    "NPMLE": lambda n: fit_counts(n, "npmle").encoding,
+    "Prior only": lambda n, x, y: np.tile(qhat_y(n), (n.shape[0], 1)),
+    "Fixed m=20": lambda n, x, y: fit_counts(n, "fixed_m", m=20.0).encoding,
+    BASELINE: lambda n, x, y: fit_counts(n, "baseline").encoding,
+    UNSEEN: lambda n, x, y: fit_counts(n, "baseline_unseen").encoding,
+    "Frequency prior": lambda n, x, y: fit_counts(n, "freq_prior").encoding,
+    "GLMM": lambda n, x, y: fit_counts(n, "glmm").encoding,
+    "NPMLE": lambda n, x, y: fit_counts(n, "npmle").encoding,
+    "CatBoost TS (a=1)": lambda n, x, y: fit_counts(n, "catboost_ts").encoding,
+    "sklearn TargetEncoder (auto)": lambda n, x, y: sklearn_target_encoding(x, y, *n.shape),
 }
 
 #: training-count bins [lo, hi] for the per-n breakdown
@@ -107,7 +112,7 @@ def run_task(task, methods, reps: int, folds: int, out: Path, eps: float = 1e-12
             n_seen[te] = n_tr.sum(axis=1)[x[te]]
             for name, fn in methods.items():
                 t0 = time.perf_counter()
-                enc = fn(n_tr)
+                enc = fn(n_tr, x[tr], y[tr])
                 sec = time.perf_counter() - t0
                 lt = -np.log(np.clip(enc[x[te], y[te]], eps, 1.0))
                 loss[name][te] = lt

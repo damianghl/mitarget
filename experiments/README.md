@@ -32,8 +32,10 @@ python experiments/realdata_tables.py --raw raw/ --out tables/
 ```
 
 Methods: prior only (reference for the gain), fixed m = 20, the K = 1
-baseline, the frequency-aware prior (`freq_prior`), the random-intercept GLMM
-(adaptive quadrature) and the binomial NPMLE. All are fit on the same training
+baseline, the baseline with the unseen correction (`baseline_unseen`), the
+frequency-aware prior (`freq_prior`), the random-intercept GLMM (adaptive
+quadrature), the binomial NPMLE, CatBoost's prediction-time target statistic
+and scikit-learn's `TargetEncoder(smooth="auto")`. All are fit on the same training
 folds of a repeated stratified k-fold (seed = repetition index), so every
 comparison is paired.
 
@@ -70,3 +72,21 @@ of the test row's level.
 | `avazu` | `avazu/avazu_train_4M.csv.gz` | first 4M rows of the raw Kaggle Avazu train |
 
 `criteo` needs `pyarrow`.
+
+## Real-data subsampling oracle
+
+```bash
+python experiments/realdata_oracle.py --data ml1m_ratings.tsv --feature movie_id --reps 50 --out oracle_raw/
+python experiments/realdata_oracle.py --data ml1m_ratings.tsv --feature movie_id --reps 50 --shuffle --out oracle_raw/
+python experiments/realdata_oracle_tables.py --raw oracle_raw/ --out oracle_tables/
+```
+
+Populations with known `q_x`: the levels of a real feature with at least 100
+rows, with `q_x` their observed rate. Training sets of `N = nbar * L` rows are
+drawn from that population, and the excess cross-entropy is exact. Every
+method is fit on the same training sets, so `paired.csv` tests each method's
+eCE against the baseline's with a paired t-test over training sets and
+reports the share of the baseline's gap to the full oracle it closes.
+`--shuffle` permutes `q_x` across levels (control without popularity
+dependence). Input files are tab-separated with the feature column and a
+`rating` column (`y = rating >= 4`).

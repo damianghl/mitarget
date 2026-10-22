@@ -46,7 +46,8 @@ SHORT = {
     "click_prediction_small / advertiser_id": "click_small/advertiser_id",
     "click_prediction_small / user_id": "click_small/user_id",
 }
-METHOD_ORDER = ["Prior only", "Fixed m=20", BASELINE, "Frequency prior", "GLMM", "NPMLE"]
+METHOD_ORDER = ["Prior only", "Fixed m=20", BASELINE, "Baseline + unseen correction", "Frequency prior",
+                "GLMM", "NPMLE", "CatBoost TS (a=1)", "sklearn TargetEncoder (auto)"]
 
 
 def _read(raw: Path, prefix: str) -> pd.DataFrame:

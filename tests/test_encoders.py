@@ -95,3 +95,21 @@ def test_classifier(binary_data):
     assert clf.mutual_information_ == pytest.approx(mutual_information(x, y))
     with pytest.raises(ValueError):
         clf.fit(np.column_stack([x, x]), y)
+
+
+def test_baseline_unseen_correction():
+    from mitarget import fit_baseline, singleton_rate
+    # rows: unseen, three singletons (two with y=1), and two larger levels
+    n = np.array([[0, 0], [0, 1], [0, 1], [1, 0], [5, 5], [8, 2]], dtype=float)
+    f = fit_counts(n, "baseline_unseen")
+    base = fit_baseline(n)
+    qy = n.sum(0) / n.sum()
+    expected = (np.array([1.0, 2.0]) + qy) / 4
+    assert np.allclose(singleton_rate(n), expected)
+    assert np.allclose(f.encoding[0], expected)
+    assert np.allclose(f.qy, expected)
+    assert np.allclose(f.encoding[1:], base.target_encoding[1:])
+    assert f.I_hat == base.I_hat
+    # no singletons: falls back to the marginal
+    n2 = np.array([[0, 0], [2, 3], [4, 1]], dtype=float)
+    assert np.allclose(fit_counts(n2, "baseline_unseen").encoding[0], n2.sum(0) / n2.sum())

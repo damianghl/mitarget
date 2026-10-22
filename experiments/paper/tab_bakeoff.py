@@ -1,64 +1,67 @@
 """
 Table for Section 7.3: held-out log-loss of single-feature encoders on the real data.
 
-Reads the bakeoff raw CSVs (task, method, fold, logloss, ...) and writes a LaTeX table with the
-baseline's gain over the prior-only predictor and, for every other method, its loss relative to
-the baseline as a share of that gain (negative = better than the baseline), +/- the SE of the
-paired fold differences.
+Reads ``table_paired.csv`` and ``table_logloss.csv`` written by ``experiments/realdata_tables.py``
+(5 x 5 repeated folds) and writes a LaTeX table with the baseline's gain over the prior-only
+predictor and, for every other method, its log-loss minus the baseline's as a share of that gain
+(negative = better than the baseline), with the Nadeau-Bengio corrected standard error in brackets.
+Cells whose Holm-adjusted corrected p-value is below 0.05 carry a star.
 """
 
 import argparse
+import os
 
-import numpy as np
 import pandas as pd
 
 TASKS = [
-    ("avazu/user=ip+model", "Avazu user (ip+model)"),
+    ("avazu/user", "Avazu user (ip+model)"),
     ("avazu/device_ip", "Avazu device\\_ip"),
     ("criteo/C1", "Criteo C1"),
     ("bx/user", "BX user, $r\\geq8$"),
-    ("bx_implicit/user", "BX user, explicit"),
-    ("amz/MGR_ID", "Amazon MGR\\_ID"),
-    ("amz/RESOURCE", "Amazon RESOURCE"),
-    ("employee_salaries / employee_position_title (salary 4-quantile)", "employee\\_salaries$^\\dagger$"),
+    ("bx_explicit/user", "BX user, explicit"),
+    ("amazon/MGR_ID", "Amazon MGR\\_ID"),
+    ("amazon/RESOURCE", "Amazon RESOURCE"),
+    ("employee_salaries/position_title", "employee\\_salaries$^\\dagger$"),
 ]
-METHODS = [("NPMLE", "NPMLE"), ("GLMM", "GLMM"), ("K=2 mixture", "$K{=}2$"),
-           ("CatBoost TS (a=1)", "CB TS"), ("Fixed m=20", "$m{=}20$"),
+METHODS = [("Baseline + unseen correction", "+unseen"), ("Frequency prior", "freq."), ("NPMLE", "NPMLE"),
+           ("GLMM", "GLMM"), ("CatBoost TS (a=1)", "CB TS"), ("Fixed m=20", "$m{=}20$"),
            ("sklearn TargetEncoder (auto)", "sklearn")]
+
+
+def cell(v, se, star):
+    if abs(v) >= 100:
+        return f"{v:+.0f}"
+    se_txt = "$<$0.1" if se < 0.05 else f"{se:.1f}"
+    return f"{v:+.1f}{'$^*$' if star else ''} ({se_txt})"
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("raw_csvs", nargs="+")
+    ap.add_argument("tables_dir", help="output folder of experiments/realdata_tables.py")
     ap.add_argument("--out", default="tab_bakeoff.tex")
     a = ap.parse_args()
-    df = pd.concat([pd.read_csv(p) for p in a.raw_csvs], ignore_index=True)
+    paired = pd.read_csv(os.path.join(a.tables_dir, "table_paired.csv"))
+    ll = pd.read_csv(os.path.join(a.tables_dir, "table_logloss.csv"))
+    paired = paired[paired.reference == "K=1 baseline"].set_index(["task", "method"])
+    gains = ll[ll.method == "K=1 baseline"].set_index("task").gain
     lines = []
     for task, label in TASKS:
-        t = df[df.task == task].pivot_table(index="fold", columns="method", values="logloss")
-        base = t["K=1 baseline"]
-        if "Prior only" in t:
-            prior = t["Prior only"]
-        else:  # balanced 4-class target: the prior-only log-loss is log 4
-            prior = pd.Series(np.log(4.0), index=t.index)
-        gain = float((prior - base).mean())
-        cells = [label, f"{gain:.4f}"]
-        vals = {}
+        gain = gains[task]
+        cells, vals = [label, f"{gain:.4f}"], {}
         for m, _ in METHODS:
-            if m not in t or t[m].isna().all():
+            if (task, m) not in paired.index:
                 cells.append("--")
                 continue
-            d = (t[m] - base) / gain * 100
-            vals[m] = d.mean()
-            se = d.std(ddof=1) / np.sqrt(d.count())
-            se_txt = "$<$0.1" if se < 0.05 else f"{se:.1f}"
-            cells.append(f"{d.mean():+.0f}" if abs(d.mean()) >= 100 else f"{d.mean():+.1f} ({se_txt})")
+            r = paired.loc[(task, m)]
+            v, se = 100 * r.diff / gain, 100 * r.se_nb / gain
+            vals[m] = v
+            cells.append(cell(v, se, r.p_nb_holm < 0.05))
         best = min(vals, key=vals.get)
         if vals[best] < 0:
             i = 2 + [m for m, _ in METHODS].index(best)
             cells[i] = "\\textbf{" + cells[i] + "}"
         lines.append(" & ".join(cells) + " \\\\")
-        print(label, gain, {k: round(v, 1) for k, v in vals.items()})
+        print(label, f"{gain:.4f}", {k: round(v, 1) for k, v in vals.items()})
     head = " & ".join(["feature", "gain"] + [lab for _, lab in METHODS]) + " \\\\"
     tex = "\n".join([
         "\\begin{tabular}{l r " + "r" * len(METHODS) + "}",
