@@ -19,6 +19,8 @@ uniform degree-``L`` polynomial approximation error of ``h``, about ``0.22 / L^2
 - :func:`mi_interval`: the interval from data, with the moments allowed to vary
   within ``slack`` standard errors (a conservative box, not a joint region).
 - :func:`worst_case_halfwidth`: ``E_L(h)``.
+- :func:`credible_interval`: the posterior mean and standard deviation of ``I`` under the
+  beta prior of Hernandez & Samengo (2019, Appendix A), for comparison.
 
 The beta / Dirichlet estimators return one point inside this interval; reporting
 both shows how much of the point estimate comes from the beta assumption.
@@ -30,7 +32,10 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy.optimize import linprog
-from scipy.special import entr
+from scipy.stats import norm
+from scipy.special import digamma, entr, logsumexp, polygamma
+
+from .core import fit_beta_star, per_state_log_likelihood, qhat_y
 
 #: Default grid of support points for the prior of q.
 GRID_SIZE = 2001
@@ -185,3 +190,83 @@ def worst_case_halfwidth(L: int, grid_size: int = GRID_SIZE) -> float:
     r = linprog(c, A_ub=A, b_ub=np.concatenate([hv, -hv]),
                 bounds=[(None, None)] * (L + 1) + [(0, None)], method="highs")
     return float(r.x[-1])
+
+
+@dataclass
+class CredibleInterval:
+    mean: float
+    sd: float
+    level: float
+    beta_star: float
+    sd_beta: float          # part of the variance from the posterior of beta
+    sd_levels: float        # part from the conditionals at fixed beta
+
+    @property
+    def lower(self) -> float:
+        return self.mean - norm.ppf(0.5 + self.level / 2) * self.sd
+
+    @property
+    def upper(self) -> float:
+        return self.mean + norm.ppf(0.5 + self.level / 2) * self.sd
+
+
+def _beta_h_moments(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """``E h(q)`` and ``E h(q)^2`` for ``q ~ Beta(a, b)`` (Hernandez & Samengo 2019, Eqs. A5, A7-A8)."""
+    s = a + b
+    eh = digamma(s + 1) - (a * digamma(a + 1) + b * digamma(b + 1)) / s
+    d2 = digamma(s + 2)
+    t1 = polygamma(1, s + 2)
+    c = 1.0 / (s * (s + 1))
+
+    def g(z):
+        return (digamma(z + 2) - d2) ** 2 + polygamma(1, z + 2) - t1
+
+    cross = (digamma(a + 1) - d2) * (digamma(b + 1) - d2) - t1
+    eh2 = c * (a * (a + 1) * g(a) + b * (b + 1) * g(b) + 2 * a * b * cross)
+    return eh, eh2
+
+
+def credible_interval(n: np.ndarray, level: float = 0.95, n_grid: int = 41,
+                      width_sd: float = 6.0) -> CredibleInterval:
+    """
+    Posterior mean and standard deviation of ``I(X;Y)`` under ``q_x ~ Beta(beta * mu)``,
+    following Appendix A of Hernandez & Samengo (2019), and the normal interval
+    ``mean +- z sd``.
+
+    The estimand is ``h(mu_hat) - sum_x (n_x / N) h(q_x)`` over the seen levels, with
+    ``mu`` fixed at the empirical label rate. The posterior of ``log beta`` (flat prior)
+    is evaluated on ``n_grid`` points within ``width_sd`` Laplace standard deviations of
+    ``beta*``; the variance is the variance of ``I(beta)`` over that posterior plus the
+    mean of ``sum_x (n_x / N)^2 Var[h(q_x) | n_x, beta]``.
+    """
+    k, nx = _binary_kn(n)
+    n = np.asarray(n, dtype=float)[nx > 0]
+    k, nx = k[nx > 0], nx[nx > 0]
+    qy = qhat_y(n)
+    N = nx.sum()
+    pairs, inv, mult = np.unique(np.column_stack([nx - k, k]), axis=0, return_inverse=True,
+                                 return_counts=True)
+    w = pairs.sum(axis=1) / N
+    beta_star = fit_beta_star(n, qy)
+
+    def loglik(lb):
+        return float(mult @ per_state_log_likelihood(np.exp(lb), pairs, qy))
+
+    lb0, eps = np.log(beta_star), 1e-3
+    curv = -(loglik(lb0 + eps) - 2 * loglik(lb0) + loglik(lb0 - eps)) / eps ** 2
+    half = width_sd / np.sqrt(curv) if curv > 0 else 3.0
+    lbs = np.linspace(lb0 - half, lb0 + half, n_grid)
+    logpost = np.array([loglik(lb) for lb in lbs])
+    post = np.exp(logpost - logsumexp(logpost))
+    hy = float(binary_entropy(qy[1]))
+    I_b, var_b = np.empty(n_grid), np.empty(n_grid)
+    for i, lb in enumerate(lbs):
+        a0, a1 = np.exp(lb) * qy[0] + pairs[:, 0], np.exp(lb) * qy[1] + pairs[:, 1]
+        eh, eh2 = _beta_h_moments(a0, a1)
+        I_b[i] = hy - float(mult @ (w * eh))
+        var_b[i] = float(mult @ (w ** 2 * (eh2 - eh ** 2)))
+    mean = float(post @ I_b)
+    v_beta = float(post @ (I_b - mean) ** 2)
+    v_levels = float(post @ var_b)
+    return CredibleInterval(mean, float(np.sqrt(v_beta + v_levels)), level, beta_star,
+                            float(np.sqrt(v_beta)), float(np.sqrt(v_levels)))

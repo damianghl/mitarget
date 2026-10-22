@@ -21,7 +21,8 @@ from .finite_mixture import FiniteMixtureFit, bic, fit_finite_mixture
 from .freq_prior import FreqPriorFit, fit_freq_prior
 from .metrics import excess_cross_entropy, exact_mutual_information, heldout_log_loss
 from .mi_interval import (
-    MIInterval, identified_interval, mi_interval, moment_estimates, worst_case_halfwidth,
+    CredibleInterval, MIInterval, credible_interval, identified_interval, mi_interval, moment_estimates,
+    worst_case_halfwidth,
 )
 
 __version__ = "0.1.0"
@@ -38,5 +39,6 @@ __all__ = [
     "FiniteMixtureFit", "bic", "fit_finite_mixture",
     "FreqPriorFit", "fit_freq_prior",
     "excess_cross_entropy", "exact_mutual_information", "heldout_log_loss",
-    "MIInterval", "identified_interval", "mi_interval", "moment_estimates", "worst_case_halfwidth",
+    "CredibleInterval", "MIInterval", "credible_interval", "identified_interval", "mi_interval",
+    "moment_estimates", "worst_case_halfwidth",
 ]
