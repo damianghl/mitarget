@@ -90,3 +90,20 @@ reports the share of the baseline's gap to the full oracle it closes.
 `--shuffle` permutes `q_x` across levels (control without popularity
 dependence). Input files are tab-separated with the feature column and a
 `rating` column (`y = rating >= 4`).
+
+## Coverage of the MI intervals
+
+```bash
+python experiments/mi_coverage.py synthetic --reps 100 --jobs 4 --out mi_raw/        # about 1.5 h on 4 cores
+python experiments/mi_coverage.py oracle --data ml1m_ratings.tsv --feature movie_id --reps 50 --jobs 4 --out mi_raw/
+python experiments/mi_coverage.py oracle --data ml1m_ratings.tsv --feature movie_id --shuffle --reps 50 --jobs 4 --out mi_raw/
+python experiments/mi_coverage_tables.py --raw mi_raw/ --out mi_tables/
+```
+
+How often the 95% moment interval (`mitarget.mi_interval`, box of 2 standard errors, largest
+`L <= 4` with at least 100 levels seen `L` times) and the 95% credible interval of Hernandez &
+Samengo (2019, Appendix A; `mitarget.credible_interval`) cover the population `I(X;Y)`, with
+their widths and the bias and RMSE of the point estimates (plug-in, baseline, NPMLE,
+frequency prior, moment midpoint). Synthetic populations draw `q_x` from the priors of the
+paper's Table `tab:id` (`K = 10^4, 10^5` levels, uniform or lognormal popularity); the oracle
+pools are those of `realdata_oracle.py`, real and shuffled.

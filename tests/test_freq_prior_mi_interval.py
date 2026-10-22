@@ -110,3 +110,27 @@ def test_mi_interval_from_data_covers_truth():
     r0 = mi_interval(n, L=2, slack=0)
     assert r.lower <= r0.lower <= r0.upper <= r.upper
     assert mi_interval(n, max_L=3).L == 3
+
+
+def test_credible_interval_beta_moments_and_coverage():
+    from scipy import integrate, stats
+
+    from mitarget import credible_interval
+    from mitarget.mi_interval import _beta_h_moments, binary_entropy
+
+    for a, b in [(0.3, 2.0), (4.0, 1.5)]:
+        eh, eh2 = _beta_h_moments(np.array(a), np.array(b))
+        pdf = stats.beta(a, b).pdf
+        assert np.isclose(eh, integrate.quad(lambda q: binary_entropy(q) * pdf(q), 0, 1)[0])  # noqa: B023
+        assert np.isclose(eh2, integrate.quad(lambda q: binary_entropy(q) ** 2 * pdf(q), 0, 1)[0])  # noqa: B023
+    rng = np.random.default_rng(3)
+    K = N = 20_000
+    q = rng.beta(0.5, 1.5, K)
+    level = rng.integers(0, K, N)
+    k = np.bincount(level, weights=rng.random(N) < q[level], minlength=K)
+    nx = np.bincount(level, minlength=K)
+    n = np.stack([nx - k, k], axis=1).astype(float)
+    c = credible_interval(n)
+    assert abs(c.mean - fit_counts(n, "baseline").I_hat) < 0.002
+    assert c.lower < binary_entropy(q.mean()) - binary_entropy(q).mean() < c.upper
+    assert c.sd_beta > c.sd_levels > 0
