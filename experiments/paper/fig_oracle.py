@@ -3,10 +3,11 @@ Section 7.2 figures from the real-data subsampling oracle (experiment A and its 
 
 fig_oracle.pdf     share of the achievable gain lost vs mean level size nbar, one panel per pool
 fig_gap_by_n.pdf   where the baseline's gap lives: split by training level size at nbar = 2
-tab_oracle.tex     gap to the oracle at nbar = 2, by method, with the gap closed by the frequency prior
+tab_oracle.tex     gap to the oracle at nbar = 2, by method, with the share of the baseline's gap
+                   closed by the unseen correction, the frequency prior and the NPMLE (paired SE)
 
-Inputs are the ``summary.csv`` and ``baseline_gap_by_n.csv`` files written by the experiment-A
-scripts (one results directory per run).
+Inputs are the ``summary.csv``, ``paired.csv`` and ``baseline_gap_by_n.csv`` files written by
+``experiments/realdata_oracle_tables.py``.
 """
 
 import argparse
@@ -27,7 +28,9 @@ POOLS = [
 ]
 LINES = [
     ("baseline", False, dict(color=COLORS["baseline"], marker="s", label="baseline")),
-    ("freq_mean_shift_lr", False, dict(color=COLORS["freq"], marker="o", label="freq. prior (shift, LR)")),
+    ("baseline_unseen", False, dict(color=COLORS["unseen"], marker="d", label="baseline + unseen corr.")),
+    ("freq_prior", False, dict(color=COLORS["freq"], marker="o", label="freq. prior (shift, LR)")),
+    ("npmle", False, dict(color=COLORS["npmle"], marker="v", label="NPMLE")),
     ("fixed_m20", False, dict(color=COLORS["fixed_m"], marker="^", label="fixed $m=20$")),
     ("beta_mm", False, dict(color=COLORS["ref"], ls="--", label="moment-matched beta")),
     ("oracle_blind", False, dict(color=COLORS["ref"], ls=":", label="popularity-blind oracle")),
@@ -84,11 +87,13 @@ def fig_gap_by_n(gap, out, nbar=2.0):
         print(f"{f:18s} " + " ".join(f"{lab}:{v:.2f}" for (_, lab), v in zip(STRATA, row, strict=False)))
 
 
-def tab_oracle(summary, gap, corr, out, nbar=2.0):
+def tab_oracle(summary, gap, paired, corr, out, nbar=2.0):
     """Gap to the oracle at one nbar (milli-nats, share of the achievable gain in brackets)."""
     s = summary[(summary.nbar == nbar) & (~summary.shuffled)]
     g = gap[(gap.nbar == nbar) & (~gap.shuffled)].set_index("feature")
-    cols = ["baseline", "freq_mean_shift_lr", "fixed_m20", "beta_mm", "oracle_blind"]
+    pr = paired[(paired.nbar == nbar) & (~paired.shuffled)].set_index(["feature", "method"])
+    cols = ["baseline", "baseline_unseen", "freq_prior", "npmle", "fixed_m20", "beta_mm", "oracle_blind"]
+    closed = ["baseline_unseen", "freq_prior", "npmle"]
     lines = []
     for feat, title in POOLS:
         r = s[s.feature == feat].set_index("method")
@@ -98,12 +103,14 @@ def tab_oracle(summary, gap, corr, out, nbar=2.0):
             v = r.loc[m, "gap_to_oracle"]
             cells.append(f"{1e3 * v:.1f} ({100 * v / achievable:.0f}\\%)")
         cells.append(f"{100 * g.loc[feat, 'share_gap_at_n<=1']:.0f}\\%")
-        cells.append(f"{100 * g.loc[feat, 'gap_closed_freq_mean_shift_lr']:.0f}\\%")
+        for m in closed:
+            c = pr.loc[(feat, m)]
+            cells.append(f"{100 * c.gap_closed:.0f} $\\pm$ {100 * c.gap_closed_sem:.0f}\\%")
         lines.append(" & ".join(cells) + " \\\\")
-    head = ("pool & corr & gain & baseline & freq.\\ prior & $m{=}20$ & matched beta & blind oracle"
-            " & gap at $n_x\\le1$ & closed by freq. \\\\")
+    head = ("pool & corr & gain & baseline & +unseen & freq.\\ prior & NPMLE & $m{=}20$ & matched beta"
+            " & blind oracle & gap at $n_x\\le1$ & closed: +unseen & freq. & NPMLE \\\\")
     with open(out, "w") as fh:
-        fh.write("\n".join(["\\begin{tabular}{l r r r r r r r r r}", "\\toprule", head, "\\midrule",
+        fh.write("\n".join(["\\begin{tabular}{l r r r r r r r r r r r r r}", "\\toprule", head, "\\midrule",
                              *lines, "\\bottomrule", "\\end{tabular}", ""]))
 
 
@@ -114,12 +121,12 @@ def main():
     a = ap.parse_args()
     summary = load(a.results_dirs, "summary.csv")
     gap = load(a.results_dirs, "baseline_gap_by_n.csv")
-    # corr(log p, q) over each pool's levels, from the experiment READMEs / conclusions doc.
-    corr = {"movie_id": 0.41, "user_id": -0.27, "bx_user_implicit": -0.24, "bx_user": -0.03,
-            "avazu_device_ip": 0.02, "criteo_C1": -0.02}
+    paired = load(a.results_dirs, "paired.csv")
+    # corr(log p, q) over each pool's levels (real data, before any shuffling)
+    corr = summary.groupby("feature").corr_logp_q.first().round(2).to_dict()
     fig_oracle(summary, os.path.join(a.out_dir, "fig_oracle.pdf"), corr)
     fig_gap_by_n(gap, os.path.join(a.out_dir, "fig_gap_by_n.pdf"))
-    tab_oracle(summary, gap, corr, os.path.join(a.out_dir, "tab_oracle.tex"))
+    tab_oracle(summary, gap, paired, corr, os.path.join(a.out_dir, "tab_oracle.tex"))
 
 
 if __name__ == "__main__":
