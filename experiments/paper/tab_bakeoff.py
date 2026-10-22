@@ -53,7 +53,7 @@ def main():
                 cells.append("--")
                 continue
             r = paired.loc[(task, m)]
-            v, se = 100 * r.diff / gain, 100 * r.se_nb / gain
+            v, se = 100 * r["diff"] / gain, 100 * r["se_nb"] / gain
             vals[m] = v
             cells.append(cell(v, se, r.p_nb_holm < 0.05))
         best = min(vals, key=vals.get)
