@@ -1,5 +1,5 @@
 """
-Table for Section 7.3: held-out log-loss of single-feature encoders on the real data.
+Tables for Section 7.3: held-out log-loss of single-feature encoders on the real data.
 
 Reads ``table_paired.csv`` and ``table_logloss.csv`` written by ``experiments/realdata_tables.py``
 (5 x 5 repeated folds) and writes a LaTeX table with the baseline's gain over the prior-only
