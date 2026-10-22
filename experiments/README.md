@@ -6,8 +6,8 @@ reproduces the original notebooks, these run the paper's settings.
 ## Real-data benchmark with paired tests
 
 ```bash
-python experiments/realdata_paired.py --data-root DATA --groups openml movielens amazon bx --reps 5 --folds 5 --out raw/
-python experiments/realdata_paired.py --data-root DATA --groups criteo avazu --reps 3 --folds 5 --out raw/
+python experiments/realdata_paired.py --data-root DATA --reps 5 --folds 5 --out raw/   # about 1.5 h on 3 cores
+python experiments/realdata_paired.py --data-root DATA --groups bx --tasks bx/user --out raw/
 python experiments/realdata_tables.py --raw raw/ --out tables/
 ```
 
@@ -25,9 +25,14 @@ Two paired tests per comparison, in `table_paired.csv`:
   conservative.
 - **Row-level paired difference, clustered by level.** Each repetition gives
   one out-of-fold loss per row and method; the mean difference is tested with
-  a standard error clustered by level, because rows of one level share an
-  encoding. It is conditional on the data set and much more powerful. The
-  table averages the mean and the standard error over repetitions.
+  a standard error that treats levels as independent clusters, because rows
+  of one level share an encoding: `SE = sqrt(sum_c D_c^2) / N` over the level
+  totals `D_c` of the difference. The totals are not centered at the row
+  mean: on click logs one level can hold a quarter of the rows while the
+  methods differ only on small levels, and the usual centered estimator then
+  reports `z ~ N / n_max` for every comparison. It is conditional on the data
+  set and much more powerful than the split test. The table averages the mean
+  and the standard error over repetitions.
 
 p-values are Holm-adjusted within each (task, reference) family.
 `table_by_n.csv` splits the out-of-fold loss by the number of training rows

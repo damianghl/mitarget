@@ -12,8 +12,8 @@ are paired. For each task the script writes to ``--out``:
   AUC (binary) and fit time.
 - ``rows_<task>.csv``: one row per (rep, method A, method B) with the
   row-level paired difference ``mean(loss_A - loss_B)`` over all out-of-fold
-  rows of that repetition and its standard error clustered by level (rows of
-  one level share an encoding, so they are not independent).
+  rows of that repetition and its standard error with levels as independent
+  clusters (rows of one level share an encoding, so they are not independent).
 - ``bins_<task>.csv``: one row per (rep, method, training-count bin) with the
   out-of-fold loss of test rows whose level was seen ``n`` times in training.
 
@@ -66,16 +66,21 @@ def task_tag(label: str) -> str:
 
 
 def clustered_diff(a: np.ndarray, b: np.ndarray, x: np.ndarray, kx: int) -> tuple[float, float]:
-    """Mean of ``a - b`` and its standard error clustered by level ``x``."""
+    """
+    Mean of ``a - b`` and its standard error with levels ``x`` as independent clusters.
+
+    The variance is ``sum_c D_c^2 / N^2`` over the level totals ``D_c`` of the
+    difference, without centering. Centering by the row mean would assume that
+    a level's expected difference scales with its size; on click logs one
+    level can hold a quarter of the rows while the methods differ only on the
+    small levels, and the centered estimator then reports ``z ~ N / n_max``.
+    """
     d = (a - b).astype(float)
     N = len(d)
-    mean = d.mean()
-    resid = np.bincount(x, weights=d - mean, minlength=kx)
-    g = np.count_nonzero(np.bincount(x, minlength=kx))
-    if g < 2:
-        return float(mean), float("nan")
-    se = np.sqrt(g / (g - 1) * np.sum(resid ** 2)) / N
-    return float(mean), float(se)
+    D = np.bincount(x, weights=d, minlength=kx)
+    if np.count_nonzero(np.bincount(x, minlength=kx)) < 2:
+        return float(d.mean()), float("nan")
+    return float(d.mean()), float(np.sqrt(np.sum(D ** 2))) / N
 
 
 def task_meta(task) -> dict:

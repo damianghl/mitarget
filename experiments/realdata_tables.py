@@ -12,12 +12,17 @@ Writes:
   log-loss difference ``method - reference``:
   the Nadeau-Bengio corrected resampled t-test over the R x K split means
   (accounts for split-to-split variation, conservative), and the row-level
-  difference with a standard error clustered by level (conditional on the
+  difference with levels as independent clusters (conditional on the
   data set, much more powerful). ``p_*_holm`` are Holm-adjusted within each
   (task, reference) family.
 - ``table_by_n.csv``: per (task, method, training-count bin) the share of test
   rows, their mean log-loss and the difference to the baseline.
 - ``table_tasks.csv``: per task N, kx, singleton shares and H(Y).
+- ``table_main.csv``: one row per task for the paper: task statistics, the
+  baseline's gain over the prior, each method's log-loss difference to the
+  baseline as a share of that gain, the Holm-adjusted split-test p-value, and
+  the share of the difference that comes from test rows of levels unseen in
+  training (``n0share``).
 """
 
 from __future__ import annotations
@@ -129,6 +134,27 @@ def by_n_table(bins: pd.DataFrame) -> pd.DataFrame:
     return t.sort_values(["task", "n_lo", "method"], kind="stable")
 
 
+def main_table(ll, paired, by_n, meta) -> pd.DataFrame:
+    base = ll[ll.method == BASELINE].set_index("task")
+    t = meta.set_index("task")[["N", "kx", "F1_2F2_share", "H_Y"]] if not meta.empty else pd.DataFrame(
+        index=base.index)
+    t["baseline_logloss"] = base.logloss
+    t["baseline_gain"] = base.gain
+    vs = paired[paired.reference == BASELINE].set_index(["task", "method"])
+    contrib = by_n.assign(c=by_n.diff_vs_baseline * by_n.row_share)
+    total = contrib.groupby(["task", "method"]).c.sum()
+    unseen = contrib[contrib.n_lo == 0].groupby(["task", "method"]).c.sum()
+    for m in METHOD_ORDER:
+        if m in ("Prior only", BASELINE) or m not in set(vs.index.get_level_values(1)):
+            continue
+        sub = vs.xs(m, level="method")
+        t[f"{m}: share"] = sub.diff_share_of_baseline_gain
+        t[f"{m}: p_holm"] = sub.p_nb_holm
+        t[f"{m}: n0share"] = (unseen.xs(m, level="method") / total.xs(m, level="method")).where(
+            total.xs(m, level="method") != 0)
+    return t.reset_index()
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--raw", type=Path, required=True, help="output folder of realdata_paired.py")
@@ -147,9 +173,11 @@ def main(argv=None):
     paired = paired_table(folds, rows, ll)
     ll.to_csv(args.out / "table_logloss.csv", index=False)
     paired.to_csv(args.out / "table_paired.csv", index=False)
-    by_n_table(bins).to_csv(args.out / "table_by_n.csv", index=False)
+    by_n = by_n_table(bins)
+    by_n.to_csv(args.out / "table_by_n.csv", index=False)
     if not meta.empty:
         meta.to_csv(args.out / "table_tasks.csv", index=False)
+    main_table(ll, paired, by_n, meta).to_csv(args.out / "table_main.csv", index=False)
 
     wide = ll.pivot(index="task", columns="method", values="logloss")
     print(wide[[m for m in METHOD_ORDER if m in wide]].to_string(float_format=lambda v: f"{v:.5f}"))
