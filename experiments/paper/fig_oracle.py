@@ -112,8 +112,10 @@ def tab_oracle(summary, gap, paired, corr, out, nbar=2.0):
         main.append(" & ".join(cells) + " \\\\")
         # appendix: gap to the oracle of every method
         full.append(" & ".join([name] + gaps) + " \\\\")
-    head = ("pool & corr & gain & baseline gap & gap at $n_x\\le1$ & closed: +unseen & freq.\\ prior & NPMLE \\\\")
-    head_full = ("pool & baseline & +unseen & freq.\\ prior & NPMLE & $m{=}20$ & matched beta & blind oracle \\\\")
+    head = ("pool & corr & gain & baseline gap & gap at $n_x\\le1$"
+            " & closed: +unseen & freq.\\ prior & NPMLE \\\\")
+    head_full = ("pool & baseline & +unseen & freq.\\ prior & NPMLE"
+                 " & $m{=}20$ & matched beta & blind oracle \\\\")
     with open(out, "w") as fh:
         fh.write("\n".join(["\\begin{tabular}{l r r r r r r r}", "\\toprule", head, "\\midrule",
                              *main, "\\bottomrule", "\\end{tabular}", ""]))

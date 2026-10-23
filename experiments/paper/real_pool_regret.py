@@ -37,7 +37,8 @@ def pool_regret(path, feature, min_rows=100, sizes=(1, 2, 3, 5)):
             pk = (w * lik).sum()
             r += pk * kl((w * lik * q).sum() / pk, (k + mu * s) / (n + s))
         regret[n] = r
-    return dict(mu=mu, t=1 / (1 + s), k3=k3, k3_beta=k3_beta, I=(w * kl(q, mu)).sum(), **{f"D{n}": r for n, r in regret.items()})
+    return dict(mu=mu, t=1 / (1 + s), k3=k3, k3_beta=k3_beta, I=(w * kl(q, mu)).sum(),
+                **{f"D{n}": r for n, r in regret.items()})
 
 
 def main():
