@@ -28,7 +28,7 @@ PRIORS = [
 POOLS = [
     ("movie_id", "MovieLens movies"),
     ("user_id", "MovieLens users"),
-    ("bx_user_implicit", "BX users, explicit"),
+    ("bx_user_implicit", "BX users, rated"),
     ("bx_user", r"BX users, $r\geq8$"),
     ("avazu_device_ip", "Avazu device\\_ip"),
     ("criteo_C1", "Criteo C1"),

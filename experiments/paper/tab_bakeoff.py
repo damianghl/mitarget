@@ -2,7 +2,7 @@
 Tables for Section 7.3: held-out log-loss of single-feature encoders on the real data.
 
 Reads ``table_main.csv`` from the paired real-data rerun (experiments/realdata_tables.py): one row per
-task with the baseline's gain over the prior-only predictor and, per method, its log-loss minus the
+task with the baseline's gain over the marginal predictor and, per method, its log-loss minus the
 baseline's as a share of that gain (negative = better), the Holm-adjusted p of the corrected
 resampled t-test, and the share of the difference that comes from test rows on unseen levels.
 Writes the main-text table (representative sparse features) and the full appendix table.
@@ -19,19 +19,21 @@ MAIN = [
     ("avazu/device_ip", "Avazu device\\_ip"),
     ("criteo/C1", "Criteo C1"),
     ("bx/user", "BX user, $r\\geq8$"),
-    ("bx_explicit/user", "BX user, explicit"),
+    ("bx_explicit/user", "BX user, rated"),
     ("bx/isbn", "BX ISBN, $r\\geq8$"),
     ("amazon/MGR_ID", "Amazon MGR\\_ID"),
     ("amazon/RESOURCE", "Amazon RESOURCE"),
     ("employee_salaries/position_title", "employee\\_salaries$^\\dagger$"),
 ]
 METHODS = [("Baseline + unseen correction", "+unseen"), ("NPMLE", "NPMLE"),
-           ("Frequency prior", "freq.\\ prior"), ("GLMM", "GLMM"), ("Fixed m=20", "$m{=}20$")]
+           ("Frequency prior", "freq.\\ prior"), ("GLMM", "GLMM"), ("Fixed m=20", "$m{=}20$"),
+           ("CatBoost TS (a=1)", "CatBoost TS")]
 ALPHA = 0.01
 
 
 def tex_name(task):
-    return task.replace("_", "\\_")
+    # the explicit-vs-implicit Book-Crossing target is called "rated" in the paper
+    return task.replace("bx_explicit/", "bx_rated/").replace("_", "\\_")
 
 
 def cell(row, m):
@@ -49,7 +51,7 @@ def n0(row, m):
 
 
 def table(df, tasks, with_n0):
-    head = ["feature", "$N$", "$k_x$", "$\\frac{F_1+2F_2}{N}$", "gain"] + [lab for _, lab in METHODS]
+    head = ["feature", "$N$", "levels", "$\\frac{F_1+2F_2}{N}$", "gain"] + [lab for _, lab in METHODS]
     if with_n0:
         head += ["NPMLE at $n_x{=}0$", "freq.\\ at $n_x{=}0$"]
     lines = []
@@ -61,7 +63,8 @@ def table(df, tasks, with_n0):
         if with_n0:
             cells += [n0(r, "NPMLE"), n0(r, "Frequency prior")]
         best = min((r[f"{m}: share"], i) for i, (m, _) in enumerate(METHODS) if np.isfinite(r[f"{m}: share"]))
-        if best[0] < 0 and r[f"{METHODS[best[1]][0]}: p_holm"] < ALPHA:
+        # no bold where the baseline gains nothing over the marginal: shares are meaningless there
+        if best[0] < 0 and r[f"{METHODS[best[1]][0]}: p_holm"] < ALPHA and r.baseline_gain > 0:
             cells[5 + best[1]] = "\\textbf{" + cells[5 + best[1]] + "}"
         lines.append(" & ".join(cells) + " \\\\")
     return "\n".join(["\\begin{tabular}{l rrrr " + "r" * (len(head) - 5) + "}", "\\toprule",

@@ -21,7 +21,7 @@ from _style import COLORS, plt
 POOLS = [
     ("movie_id", "MovieLens movies"),
     ("user_id", "MovieLens users"),
-    ("bx_user_implicit", "Book-Crossing users, explicit"),
+    ("bx_user_implicit", "Book-Crossing users, rated"),
     ("bx_user", r"Book-Crossing users, $r\geq8$"),
     ("avazu_device_ip", "Avazu device_ip"),
     ("criteo_C1", "Criteo C1"),
@@ -94,24 +94,34 @@ def tab_oracle(summary, gap, paired, corr, out, nbar=2.0):
     pr = paired[(paired.nbar == nbar) & (~paired.shuffled)].set_index(["feature", "method"])
     cols = ["baseline", "baseline_unseen", "freq_prior", "npmle", "fixed_m20", "beta_mm", "oracle_blind"]
     closed = ["baseline_unseen", "freq_prior", "npmle"]
-    lines = []
+    main, full = [], []
     for feat, title in POOLS:
         r = s[s.feature == feat].set_index("method")
         achievable = r.loc["marginal", "eCE"] - r.loc["oracle", "eCE"]
-        cells = [title.replace("_", "\\_"), f"{corr[feat]:+.2f}", f"{1e3 * achievable:.1f}"]
+        name = title.replace("_", "\\_")
+        gaps = []
         for m in cols:
             v = r.loc[m, "gap_to_oracle"]
-            cells.append(f"{1e3 * v:.1f} ({100 * v / achievable:.0f}\\%)")
-        cells.append(f"{100 * g.loc[feat, 'share_gap_at_n<=1']:.0f}\\%")
+            gaps.append(f"{1e3 * v:.1f} ({100 * v / achievable:.0f}\\%)")
+        # main text: where the baseline's gap sits and how much of it each method closes
+        cells = [name, f"{corr[feat]:+.2f}", f"{1e3 * achievable:.1f}", gaps[0],
+                 f"{100 * g.loc[feat, 'share_gap_at_n<=1']:.0f}\\%"]
         for m in closed:
             c = pr.loc[(feat, m)]
             cells.append(f"{100 * c.gap_closed:.0f} $\\pm$ {100 * c.gap_closed_sem:.0f}\\%")
-        lines.append(" & ".join(cells) + " \\\\")
-    head = ("pool & corr & gain & baseline & +unseen & freq.\\ prior & NPMLE & $m{=}20$ & matched beta"
-            " & blind oracle & gap at $n_x\\le1$ & closed: +unseen & freq. & NPMLE \\\\")
+        main.append(" & ".join(cells) + " \\\\")
+        # appendix: gap to the oracle of every method
+        full.append(" & ".join([name] + gaps) + " \\\\")
+    head = ("pool & corr & gain & baseline gap & gap at $n_x\\le1$"
+            " & closed: +unseen & freq.\\ prior & NPMLE \\\\")
+    head_full = ("pool & baseline & +unseen & freq.\\ prior & NPMLE"
+                 " & $m{=}20$ & matched beta & blind oracle \\\\")
     with open(out, "w") as fh:
-        fh.write("\n".join(["\\begin{tabular}{l r r r r r r r r r r r r r}", "\\toprule", head, "\\midrule",
-                             *lines, "\\bottomrule", "\\end{tabular}", ""]))
+        fh.write("\n".join(["\\begin{tabular}{l r r r r r r r}", "\\toprule", head, "\\midrule",
+                             *main, "\\bottomrule", "\\end{tabular}", ""]))
+    with open(out.replace(".tex", "_gaps.tex"), "w") as fh:
+        fh.write("\n".join(["\\begin{tabular}{l r r r r r r r}", "\\toprule", head_full, "\\midrule",
+                             *full, "\\bottomrule", "\\end{tabular}", ""]))
 
 
 def main():
