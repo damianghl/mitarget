@@ -13,6 +13,10 @@ into the paper repo's `figures/` and `tables/`. Data are not committed (licences
 | `fig_mi_coverage.pdf`, `tab_mi_coverage.tex` | Sec. 7.4 | `python fig_mi_coverage.py <tables dir>/summary.csv` | `summary.csv` from `../mi_coverage_tables.py` |
 | real-pool regret numbers | Sec. 4, numerical check | `python real_pool_regret.py name=path[:feature] ...` | prepared pool `.tsv` files of `../realdata_oracle.py` |
 | `tab_bakeoff.tex`, `tab_bakeoff_full.tex` | Tab. `tab:bakeoff` (Sec. 7.3) | `python tab_bakeoff.py <tables dir>/table_main.csv` | `table_main.csv` from `../realdata_tables.py` |
+| `fig_teaser.pdf` | Fig. `fig:teaser` (Sec. 1) | `python fig_teaser.py --by-n <tables dir>/table_by_n.csv --pools movie_id=ml1m_ratings.tsv:movie_id bx_user_implicit=bx_user_implicit.tsv avazu_device_ip=avazu_device_ip.tsv` | `table_by_n.csv` from `../realdata_tables.py`, prepared pool `.tsv` files |
+| large-n regret table | Tab. `tab:largen` (App. `app:gap`) | `python large_n_regret.py` | none (exact sums) |
+| GLMM Laplace vs AGQ | Tab. `tab:glmm` (App. `app:glmm`) | `python glmm_laplace.py --arff-dir code/data --avazu avazu_train_4M.csv.gz` | OpenML ARFF exports, raw Avazu |
+| theory checks | Tabs. `tab:regret`, `tab:avg`, `tab:id`; MC check of Prop. `prop:ml` | `python theory/verify.py`, `python theory/pseudo_true.py`, `python theory/unseen_mi_bounds.py` | none (`verify.py` needs `sympy`) |
 
 The MI coverage input comes from `experiments/mi_coverage.py` (see `experiments/README.md`). The oracle and bakeoff inputs come from `experiments/realdata_oracle.py` and
 `experiments/realdata_paired.py` (see `experiments/README.md`).

@@ -34,6 +34,8 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 110
 src = ["src"]
+# Verbatim theory checks from the paper notes (exact sums, LPs); kept as written.
+extend-exclude = ["experiments/paper/theory"]
 
 [tool.ruff.lint]
 select = ["E", "F", "B"]
