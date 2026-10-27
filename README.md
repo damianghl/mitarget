@@ -25,6 +25,7 @@ learned from coincidences in the data instead of hand-picked.
 |---|---|---|
 | `"baseline"` | one shared `beta` | empirical Bayes (1-D optimization) |
 | `"baseline_unseen"` | the baseline, but unseen categories get the label rate of categories seen once (`singleton_rate`) | as baseline |
+| `"baseline_robbins"` | `"baseline_unseen"`, and categories seen once get the label rate of the other row in doubletons sharing their label (`doubleton_rates`), when a likelihood-ratio test on the doubletons rejects the baseline (`doubleton_test`; `"baseline_robbins_raw"` always) | as baseline |
 | `"mixture"` | `K` clusters of categories, each with its own `beta_c` | EM with restarts |
 | `"crp"` | Chinese Restaurant Process over clusters, self-tuning concentration | collapsed Gibbs |
 | `"fixed_m"` | additive smoothing with fixed `m` (default 20) | none, for comparison |

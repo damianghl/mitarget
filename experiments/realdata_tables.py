@@ -46,7 +46,8 @@ SHORT = {
     "click_prediction_small / advertiser_id": "click_small/advertiser_id",
     "click_prediction_small / user_id": "click_small/user_id",
 }
-METHOD_ORDER = ["Prior only", "Fixed m=20", BASELINE, "Baseline + unseen correction", "Frequency prior",
+METHOD_ORDER = ["Prior only", "Fixed m=20", BASELINE, "Baseline + unseen correction",
+                "Baseline + Robbins (n<=1)", "Baseline + Robbins (n<=1) raw", "Frequency prior",
                 "GLMM", "NPMLE", "CatBoost TS (a=1)", "sklearn TargetEncoder (auto)"]
 
 

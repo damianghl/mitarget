@@ -113,3 +113,56 @@ def test_baseline_unseen_correction():
     # no singletons: falls back to the marginal
     n2 = np.array([[0, 0], [2, 3], [4, 1]], dtype=float)
     assert np.allclose(fit_counts(n2, "baseline_unseen").encoding[0], n2.sum(0) / n2.sum())
+
+
+def test_baseline_robbins_correction():
+    from mitarget import doubleton_rates, fit_baseline, singleton_rate
+    # unseen, two singletons, doubletons (y counts) 2x(0,2), 1x(1,1), 1x(2,0), one larger level
+    n = np.array([[0, 0], [0, 1], [1, 0], [0, 2], [0, 2], [1, 1], [2, 0], [6, 3]], dtype=float)
+    f = fit_counts(n, "baseline_robbins_raw")
+    base = fit_baseline(n)
+    # binary Robbins form, with one pseudo-pair toward the prior row
+    F20, F21, F22 = 1, 1, 2
+    prior = np.array([[0.3, 0.7], [0.6, 0.4]])
+    R = doubleton_rates(n, prior)
+    assert R[1, 1] == pytest.approx((2 * F22 + 0.4) / (2 * F22 + F21 + 1))
+    assert R[0, 1] == pytest.approx((F21 + 0.7) / (F21 + 2 * F20 + 1))
+    assert np.allclose(R.sum(axis=1), 1)
+    s = base.beta_star
+    qy = base.qy
+    pri = (np.eye(2) + s * qy) / (1 + s)
+    R = doubleton_rates(n, pri)
+    assert np.allclose(f.encoding[0], singleton_rate(n))
+    assert np.allclose(f.encoding[1], R[1]) and np.allclose(f.encoding[2], R[0])
+    assert np.allclose(f.encoding[3:], base.target_encoding[3:])
+    assert f.I_hat == base.I_hat
+    # no doubletons: once-seen levels keep the baseline encoding
+    n2 = np.array([[0, 1], [1, 0], [4, 1], [2, 5]], dtype=float)
+    assert np.allclose(fit_counts(n2, "baseline_robbins_raw").encoding[:2],
+                       fit_baseline(n2).target_encoding[:2])
+    # multi-class: rows of the pair table are distributions
+    n3 = np.array([[1, 1, 0], [0, 0, 2], [0, 1, 1], [1, 0, 0], [3, 2, 4]], dtype=float)
+    assert np.allclose(doubleton_rates(n3).sum(axis=1), 1)
+
+
+def test_doubleton_test_rejects_popularity_shift():
+    from mitarget import doubleton_test
+    rng = np.random.default_rng(0)
+    # singletons and big levels around 0.5; doubletons mostly all-ones (high mean, strong agreement)
+    single = np.array([[1, 0], [0, 1]] * 500, dtype=float)
+    k = rng.binomial(20, 0.5, 300)
+    big = np.column_stack([20 - k, k]).astype(float)
+    dbl = np.array([[0, 2]] * 150 + [[2, 0]] * 50 + [[1, 1]] * 20, dtype=float)
+    n = np.vstack([single, big, dbl])
+    f = fit_counts(n, "baseline")
+    assert doubleton_test(n, f.details.beta_star, f.qy) < 1e-6
+    g = fit_counts(n, "baseline_robbins")
+    assert not np.allclose(g.encoding[:2], f.encoding[:2])
+    # doubletons drawn from the fitted beta itself: not rejected
+    m = np.vstack([single, big])
+    fm = fit_counts(m, "baseline")
+    s, q1 = fm.details.beta_star, fm.qy[1]
+    k = rng.binomial(2, rng.beta(s * q1, s * (1 - q1), 400))
+    m = np.vstack([m, np.column_stack([2 - k, k])])
+    fm = fit_counts(m, "baseline")
+    assert doubleton_test(m, fm.details.beta_star, fm.qy) > 0.01

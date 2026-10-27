@@ -81,7 +81,8 @@ def standard_methods(mixture_ks=(2, 3), crp: bool = True, crp_kwargs: dict | Non
     encoders; ``catboost`` the full CatBoost classifier (default: when the
     ``catboost`` package is installed). ``freq_prior`` adds the
     frequency-aware prior (binary targets only); ``unseen_correction`` the
-    baseline with the singleton rate for unseen categories.
+    baseline with the singleton rate for unseen categories, and the same with
+    the doubleton (Robbins) rates for categories seen once.
     """
     methods: dict[str, Method] = {
         "Plug-in": _from_counts("plugin"),
@@ -93,6 +94,7 @@ def standard_methods(mixture_ks=(2, 3), crp: bool = True, crp_kwargs: dict | Non
     methods["K=1 baseline"] = _from_counts("baseline")
     if unseen_correction:
         methods["Baseline + unseen correction"] = _from_counts("baseline_unseen")
+        methods["Baseline + Robbins (n<=1)"] = _from_counts("baseline_robbins")
     if freq_prior:
         methods["Frequency prior"] = _from_counts("freq_prior")
     for K in mixture_ks:

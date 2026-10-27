@@ -42,6 +42,7 @@ from realdata_tasks import GROUPS  # noqa: E402
 
 BASELINE = "K=1 baseline"
 UNSEEN = "Baseline + unseen correction"
+ROBBINS = "Baseline + Robbins (n<=1)"
 
 #: name -> function of the training count matrix and training labels returning a (kx, ky) encoding
 METHODS = {
@@ -49,6 +50,8 @@ METHODS = {
     "Fixed m=20": lambda n, x, y: fit_counts(n, "fixed_m", m=20.0).encoding,
     BASELINE: lambda n, x, y: fit_counts(n, "baseline").encoding,
     UNSEEN: lambda n, x, y: fit_counts(n, "baseline_unseen").encoding,
+    ROBBINS: lambda n, x, y: fit_counts(n, "baseline_robbins").encoding,
+    ROBBINS + " raw": lambda n, x, y: fit_counts(n, "baseline_robbins_raw").encoding,
     "Frequency prior": lambda n, x, y: fit_counts(n, "freq_prior").encoding,
     "GLMM": lambda n, x, y: fit_counts(n, "glmm").encoding,
     "NPMLE": lambda n, x, y: fit_counts(n, "npmle").encoding,
