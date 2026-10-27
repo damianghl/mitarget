@@ -33,6 +33,8 @@ python experiments/realdata_tables.py --raw raw/ --out tables/
 
 Methods: prior only (reference for the gain), fixed m = 20, the K = 1
 baseline, the baseline with the unseen correction (`baseline_unseen`), the
+baseline with the Robbins correction for levels seen at most once
+(`baseline_robbins`, and `baseline_robbins_raw` without its doubleton test), the
 frequency-aware prior (`freq_prior`), the random-intercept GLMM (adaptive
 quadrature), the binomial NPMLE, CatBoost's prediction-time target statistic
 and scikit-learn's `TargetEncoder(smooth="auto")`. All are fit on the same training

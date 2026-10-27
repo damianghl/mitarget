@@ -14,6 +14,8 @@ sets of ``N = nbar * L`` rows are drawn i.i.d., so the excess cross-entropy
 
 Methods, all fit on the same training set (so every comparison is paired):
 marginal, fixed m = 20, the baseline, the baseline with the unseen correction,
+the baseline with the Robbins correction for n <= 1 (``baseline_robbins``, with
+its doubleton test; ``baseline_robbins_raw`` without),
 the frequency prior (``freq_prior``: n + 1 shift, LR fallback), NPMLE, GLMM;
 and three references that use the truth: the beta moment-matched to the q of
 a random row (``beta_mm``), the popularity-blind oracle (Bayes with the true
@@ -48,6 +50,8 @@ FITTED = {
     "fixed_m20": lambda n: fit_counts(n, "fixed_m", m=20.0).encoding[:, 1],
     "baseline": lambda n: fit_counts(n, "baseline").encoding[:, 1],
     "baseline_unseen": lambda n: fit_counts(n, "baseline_unseen").encoding[:, 1],
+    "baseline_robbins": lambda n: fit_counts(n, "baseline_robbins").encoding[:, 1],
+    "baseline_robbins_raw": lambda n: fit_counts(n, "baseline_robbins_raw").encoding[:, 1],
     "freq_prior": lambda n: fit_counts(n, "freq_prior").encoding[:, 1],
     "npmle": lambda n: fit_counts(n, "npmle").encoding[:, 1],
     "glmm": lambda n: fit_counts(n, "glmm").encoding[:, 1],
@@ -76,7 +80,7 @@ def bayes_predict(n1, n0, q, log_prior):
     return post @ q
 
 
-def run_cell(p, q, N, rng):
+def run_cell(p, q, N, rng, fitted=FITTED):
     L = len(p)
     level = rng.choice(L, size=N, p=p)
     y = rng.random(N) < q[level]
@@ -86,7 +90,7 @@ def run_cell(p, q, N, rng):
     counts = np.column_stack([n0, n1])
 
     preds, seconds = {"marginal": np.full(L, n1.sum() / N)}, {}
-    for name, fn in FITTED.items():
+    for name, fn in fitted.items():
         t0 = time.perf_counter()
         preds[name] = fn(counts)
         seconds[name] = time.perf_counter() - t0
@@ -123,8 +127,12 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=2026)
     ap.add_argument("--nbar", type=float, nargs="*", default=NBAR_GRID)
     ap.add_argument("--shuffle", action="store_true", help="permute q_j across levels")
+    ap.add_argument("--methods", nargs="*", default=list(FITTED), choices=list(FITTED),
+                    help="fitted methods to run (training sets do not depend on this choice)")
+    ap.add_argument("--suffix", default="", help="appended to the output file name")
     ap.add_argument("--out", type=Path, required=True, help="output folder")
     a = ap.parse_args(argv)
+    fitted = {m: FITTED[m] for m in a.methods}
 
     name = a.name or a.feature
     p, q, M = load_population(a.data, a.feature, a.min_rows)
@@ -137,14 +145,14 @@ def main(argv=None):
           f"corr(log p, q)={corr:+.2f}", flush=True)
 
     a.out.mkdir(parents=True, exist_ok=True)
-    path = a.out / f"oracle_{name}_{'shuffled' if a.shuffle else 'real'}.csv"
+    path = a.out / f"oracle_{name}_{'shuffled' if a.shuffle else 'real'}{a.suffix}.csv"
     rng = np.random.default_rng(a.seed)
     out = []
     for nbar in a.nbar:
         N = int(round(nbar * L))
         t0 = time.time()
         for rep in range(a.reps):
-            for r in run_cell(p, q, N, rng):
+            for r in run_cell(p, q, N, rng, fitted):
                 out.append(dict(feature=name, shuffled=a.shuffle, L=L, I_XY=I_pop, corr_logp_q=corr,
                                 nbar=nbar, rep=rep, **r))
         print(f"  nbar={nbar:5.2f} N={N:6d} done in {time.time() - t0:.1f}s", flush=True)

@@ -23,14 +23,14 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 from sklearn.utils.validation import check_is_fitted
 
-from .baseline import fit_baseline, singleton_rate
+from .baseline import doubleton_rates, doubleton_test, fit_baseline, singleton_rate
 from .competitors import _one_vs_rest, catboost_ts_encoding, fit_glmm, fit_npmle
 from .core import counts_from_labels, fixed_m_encoding, plugin_information, plugin_target_encoding, qhat_y
 from .crp import fit_crp_mixture
 from .finite_mixture import fit_finite_mixture
 from .freq_prior import fit_freq_prior
 
-METHODS = ("baseline", "baseline_unseen", "mixture", "crp", "fixed_m", "plugin", "glmm", "npmle",
+METHODS = ("baseline", "baseline_unseen", "baseline_robbins", "baseline_robbins_raw", "mixture", "crp", "fixed_m", "plugin", "glmm", "npmle",
            "catboost_ts", "freq_prior")
 
 
@@ -44,8 +44,11 @@ class EncodingFit:
 
 def fit_counts(n: np.ndarray, method: str = "baseline", *, n_components: int = 2,
                m: float = 20.0, n_init: int = 4, crp_kwargs: dict | None = None,
-               random_state: int | None = None) -> EncodingFit:
-    """Fit one of :data:`METHODS` to a ``(kx, ky)`` count matrix."""
+               random_state: int | None = None, alpha: float = 0.05) -> EncodingFit:
+    """
+    Fit one of :data:`METHODS` to a ``(kx, ky)`` count matrix. ``alpha`` is the
+    level of the doubleton test of ``"baseline_robbins"``.
+    """
     n = np.asarray(n, dtype=float)
     qy = qhat_y(n)
     if method == "baseline":
@@ -56,6 +59,19 @@ def fit_counts(n: np.ndarray, method: str = "baseline", *, n_components: int = 2
         unseen = singleton_rate(n, qy)
         enc = f.target_encoding.copy()
         enc[n.sum(axis=1) == 0] = unseen
+        return EncodingFit(enc, unseen, f.I_hat, f)
+    if method in ("baseline_robbins", "baseline_robbins_raw"):
+        f = fit_baseline(n, qy=qy)
+        unseen = singleton_rate(n, qy)
+        nx = n.sum(axis=1)
+        enc = f.target_encoding.copy()
+        enc[nx == 0] = unseen
+        once = nx == 1
+        # baseline prediction after one row of label c, the default for each row of the doubleton rates
+        prior = (np.eye(n.shape[1]) + f.beta_star * qy[None, :]) / (1 + f.beta_star)
+        # "baseline_robbins" keeps the baseline on once-seen categories unless the doubletons reject it
+        if method == "baseline_robbins_raw" or doubleton_test(n, f.beta_star, qy) < alpha:
+            enc[once] = doubleton_rates(n, prior)[n[once].argmax(axis=1)]
         return EncodingFit(enc, unseen, f.I_hat, f)
     if method == "mixture":
         f = fit_finite_mixture(n, K=n_components, qy=qy, n_init=n_init, seed=random_state)
@@ -147,6 +163,10 @@ class BayesianTargetEncoder(_EstimatorParams, TransformerMixin, BaseEstimator):
         "baseline" is the single-beta estimator of Hernandez & Samengo (2019);
         "baseline_unseen" is the same with the unseen correction: categories
         not seen in training get the label rate of the categories seen once;
+        "baseline_robbins" also gives categories seen once the Robbins-form
+        prediction read off the categories seen twice (``doubleton_rates``)
+        when a likelihood-ratio test on the doubletons rejects the baseline
+        (``doubleton_test``; "baseline_robbins_raw" skips the test);
         "mixture" a finite mixture with ``n_components`` betas; "crp" the
         self-tuning CRP mixture (slowest). "fixed_m" and "plugin" are the
         classic smoothed and unsmoothed encoders, for comparison.
