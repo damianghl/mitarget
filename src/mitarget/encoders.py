@@ -30,7 +30,8 @@ from .crp import fit_crp_mixture
 from .finite_mixture import fit_finite_mixture
 from .freq_prior import fit_freq_prior
 
-METHODS = ("baseline", "baseline_unseen", "baseline_robbins", "baseline_robbins_raw", "mixture", "crp", "fixed_m", "plugin", "glmm", "npmle",
+METHODS = ("baseline", "baseline_unseen", "baseline_robbins", "baseline_robbins_raw", "mixture", "crp",
+           "fixed_m", "plugin", "glmm", "npmle",
            "catboost_ts", "freq_prior")
 
 

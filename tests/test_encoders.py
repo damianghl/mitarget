@@ -138,7 +138,8 @@ def test_baseline_robbins_correction():
     assert f.I_hat == base.I_hat
     # no doubletons: once-seen levels keep the baseline encoding
     n2 = np.array([[0, 1], [1, 0], [4, 1], [2, 5]], dtype=float)
-    assert np.allclose(fit_counts(n2, "baseline_robbins_raw").encoding[:2], fit_baseline(n2).target_encoding[:2])
+    assert np.allclose(fit_counts(n2, "baseline_robbins_raw").encoding[:2],
+                       fit_baseline(n2).target_encoding[:2])
     # multi-class: rows of the pair table are distributions
     n3 = np.array([[1, 1, 0], [0, 0, 2], [0, 1, 1], [1, 0, 0], [3, 2, 4]], dtype=float)
     assert np.allclose(doubleton_rates(n3).sum(axis=1), 1)
