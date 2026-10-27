@@ -29,6 +29,8 @@ METHODS = [("Baseline + unseen correction", "+unseen"), ("Baseline + Robbins (n<
            ("NPMLE", "NPMLE"),
            ("Frequency prior", "freq.\\ prior"), ("GLMM", "GLMM"), ("Fixed m=20", "$m{=}20$"),
            ("CatBoost TS (a=1)", "CatBoost TS")]
+# the main-text table leaves out CatBoost TS (it loses on every sparse feature); the appendix table keeps it
+METHODS_MAIN = METHODS[:-1]
 ALPHA = 0.01
 
 
@@ -51,24 +53,33 @@ def n0(row, m):
         else "--"
 
 
-def table(df, tasks, with_n0):
-    head = ["feature", "$N$", "levels", "$\\frac{F_1+2F_2}{N}$", "gain"] + [lab for _, lab in METHODS]
+def stack(*rows):
+    return "\\begin{tabular}[b]{@{}c@{}}" + " \\\\ ".join(rows) + "\\end{tabular}"
+
+
+def table(df, tasks, methods, with_n0, with_size=True):
+    # the main-text table leaves out N and #levels for width; the appendix table keeps them
+    size = ["$N$", "levels"] if with_size else []
+    head = ["feature", *size, "$\\frac{F_1+2F_2}{N}$", "gain"] + [lab for _, lab in methods]
+    k = len(head) - len(methods)
     if with_n0:
-        head += ["NPMLE at $n_x{=}0$", "freq.\\ at $n_x{=}0$"]
+        head += [stack("NPMLE", "at $n_x{=}0$"), stack("freq.", "at $n_x{=}0$")]
     lines = []
     for task, label in tasks:
         r = df.loc[task]
-        cells = [label, f"{r.N / 1e3:,.0f}k" if r.N < 1e6 else f"{r.N / 1e6:.1f}M",
-                 f"{r.kx:,.0f}", f"{r.F1_2F2_share:.2f}", f"{r.baseline_gain:.4f}"]
-        cells += [cell(r, m) for m, _ in METHODS]
+        cells = [label]
+        if with_size:
+            cells += [f"{r.N / 1e3:,.0f}k" if r.N < 1e6 else f"{r.N / 1e6:.1f}M", f"{r.kx:,.0f}"]
+        cells += [f"{r.F1_2F2_share:.2f}", f"{r.baseline_gain:.4f}"]
+        cells += [cell(r, m) for m, _ in methods]
         if with_n0:
             cells += [n0(r, "NPMLE"), n0(r, "Frequency prior")]
-        best = min((r[f"{m}: share"], i) for i, (m, _) in enumerate(METHODS) if np.isfinite(r[f"{m}: share"]))
+        best = min((r[f"{m}: share"], i) for i, (m, _) in enumerate(methods) if np.isfinite(r[f"{m}: share"]))
         # no bold where the baseline gains nothing over the marginal: shares are meaningless there
-        if best[0] < 0 and r[f"{METHODS[best[1]][0]}: p_holm"] < ALPHA and r.baseline_gain > 0:
-            cells[5 + best[1]] = "\\textbf{" + cells[5 + best[1]] + "}"
+        if best[0] < 0 and r[f"{methods[best[1]][0]}: p_holm"] < ALPHA and r.baseline_gain > 0:
+            cells[k + best[1]] = "\\textbf{" + cells[k + best[1]] + "}"
         lines.append(" & ".join(cells) + " \\\\")
-    return "\n".join(["\\begin{tabular}{l rrrr " + "r" * (len(head) - 5) + "}", "\\toprule",
+    return "\n".join(["\\begin{tabular}{l " + "r" * (k - 1) + " " + "r" * (len(head) - k) + "}", "\\toprule",
                       " & ".join(head) + " \\\\", "\\midrule", *lines, "\\bottomrule", "\\end{tabular}", ""])
 
 
@@ -79,9 +90,9 @@ def main():
     a = ap.parse_args()
     df = pd.read_csv(a.table_main).set_index("task")
     with open(os.path.join(a.out_dir, "tab_bakeoff.tex"), "w") as fh:
-        fh.write(table(df, MAIN, with_n0=True))
+        fh.write(table(df, MAIN, METHODS_MAIN, with_n0=True, with_size=False))
     with open(os.path.join(a.out_dir, "tab_bakeoff_full.tex"), "w") as fh:
-        fh.write(table(df, [(t, tex_name(t)) for t in df.index], with_n0=False))
+        fh.write(table(df, [(t, tex_name(t)) for t in df.index], METHODS, with_n0=False))
     for task, _ in MAIN:
         r = df.loc[task]
         parts = [f"{m}={100 * r[f'{m}: share']:+.1f} p={r[f'{m}: p_holm']:.1e} n0={r[f'{m}: n0share']:.2f}"
