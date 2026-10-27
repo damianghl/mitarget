@@ -11,6 +11,7 @@ into the paper repo's `figures/` and `tables/`. Data are not committed (licences
 | `fig_junk.pdf` | Fig. `fig:junk` (Sec. 7.1) | `python fig_junk.py junk_fraction_summary.csv` | sweep above |
 | `fig_oracle.pdf`, `fig_gap_by_n.pdf`, `tab_oracle.tex`, `tab_oracle_gaps.tex` | Sec. 7.2 | `python fig_oracle.py <tables dir>` | `summary.csv`, `paired.csv`, `baseline_gap_by_n.csv` from `../realdata_oracle_tables.py` |
 | `fig_mi_coverage.pdf`, `tab_mi_coverage.tex` | Sec. 8 | `python fig_mi_coverage.py <tables dir>/summary.csv` | `summary.csv` from `../mi_coverage_tables.py` |
+| `tab_mi_point.tex` | Tab. `tab:mi-point` (App. `app:mi-point`) | `python tab_mi_point.py <tables dir>/summary.csv` | `summary.csv` from `../mi_coverage_tables.py` |
 | real-pool regret numbers | Sec. 4, numerical check | `python real_pool_regret.py name=path[:feature] ...` | prepared pool `.tsv` files of `../realdata_oracle.py` |
 | `tab_bakeoff.tex`, `tab_bakeoff_full.tex` | Tab. `tab:bakeoff` (Sec. 7.3) | `python tab_bakeoff.py <tables dir>/table_main.csv` | `table_main.csv` from `../realdata_tables.py` |
 | `fig_teaser.pdf` | Fig. `fig:teaser` (Sec. 1) | `python fig_teaser.py --by-n <tables dir>/table_by_n.csv --pools movie_id=ml1m_ratings.tsv:movie_id bx_user_implicit=bx_user_implicit.tsv avazu_device_ip=avazu_device_ip.tsv` | `table_by_n.csv` from `../realdata_tables.py`, prepared pool `.tsv` files |

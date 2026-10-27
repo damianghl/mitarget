@@ -97,16 +97,19 @@ dependence). Input files are tab-separated with the feature column and a
 
 ```bash
 export OMP_NUM_THREADS=1   # one BLAS thread per worker; about 5x faster with --jobs 4
-python experiments/mi_coverage.py synthetic --reps 100 --jobs 4 --out mi_raw/        # about 50 min on 4 cores
+python experiments/mi_coverage.py synthetic --reps 100 --jobs 4 --out mi_raw/        # about 1.5 h on 4 cores
 python experiments/mi_coverage.py oracle --data ml1m_ratings.tsv --feature movie_id --reps 50 --jobs 4 --out mi_raw/
 python experiments/mi_coverage.py oracle --data ml1m_ratings.tsv --feature movie_id --shuffle --reps 50 --jobs 4 --out mi_raw/
 python experiments/mi_coverage_tables.py --raw mi_raw/ --out mi_tables/
 ```
 
-How often the 95% moment interval (`mitarget.mi_interval`, box of 2 standard errors, largest
-`L <= 4` with at least 100 levels seen `L` times) and the 95% credible interval of Hernandez &
+How often the 95% moment interval (`mitarget.mi_interval`, largest `L <= 4` with at least 100
+levels seen `L` times; computed with the default joint region in the principal axes of the moment
+covariance, and with the older per-moment box of 2 standard errors) and the 95% credible interval of Hernandez &
 Samengo (2019, Appendix A; `mitarget.credible_interval`) cover the population `I(X;Y)`, with
 their widths and the bias and RMSE of the point estimates (plug-in, baseline, NPMLE,
 frequency prior, moment midpoint). Synthetic populations draw `q_x` from the priors of the
 paper's Table `tab:id` (`K = 10^4, 10^5` levels, uniform or lognormal popularity); the oracle
-pools are those of `realdata_oracle.py`, real and shuffled.
+pools are those of `realdata_oracle.py`, real and shuffled. Each row also has the identified
+interval at the population's own moments (`id_lo`, `id_hi`), the width that remains with exact
+moments up to the same `L`.

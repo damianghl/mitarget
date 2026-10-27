@@ -16,8 +16,11 @@ uniform degree-``L`` polynomial approximation error of ``h``, about ``0.22 / L^2
   over levels with ``n_x >= j``, with standard errors.
 - :func:`identified_interval`: the population interval given exact moments
   (two linear programmes over priors on a grid).
-- :func:`mi_interval`: the interval from data, with the moments allowed to vary
-  within ``slack`` standard errors (a conservative box, not a joint region).
+- :func:`moment_covariance`: the joint covariance of those estimates.
+- :func:`mi_interval`: the interval from data, with the moments allowed to vary within a
+  joint confidence region: by default a box in the principal axes of their covariance
+  (Sidak-corrected, so it covers the moments jointly), or the older per-moment box of
+  ``slack`` standard errors, which ignores their strong correlation and is conservative.
 - :func:`worst_case_halfwidth`: ``E_L(h)``.
 - :func:`credible_interval`: the posterior mean and standard deviation of ``I`` under the
   beta prior of Hernandez & Samengo (2019, Appendix A), for comparison.
@@ -74,6 +77,25 @@ def moment_estimates(n: np.ndarray, L: int) -> tuple[np.ndarray, np.ndarray, np.
         m[j - 1] = u.mean()
         se[j - 1] = u.std(ddof=1) / np.sqrt(used[j - 1]) if used[j - 1] > 1 else np.inf
     return m, se, used
+
+
+def moment_covariance(n: np.ndarray, L: int) -> np.ndarray:
+    """
+    ``(L, L)`` covariance of the estimates of :func:`moment_estimates`, treating levels as
+    independent: ``m_j`` averages ``u_j(x)`` over the levels with ``n_x >= j``, so
+    ``Cov(m_j, m_l) = sum_x (u_j - m_j)(u_l - m_l) / (|S_j| |S_l|)`` over levels in both sets.
+    """
+    k, nx = _binary_kn(n)
+    U = np.full((len(nx), L), np.nan)
+    for j in range(1, L + 1):
+        sel = nx >= j
+        u = np.ones(int(sel.sum()))
+        for i in range(j):
+            u *= np.clip(k[sel] - i, 0, None) / (nx[sel] - i)
+        U[sel, j - 1] = u
+    used = np.sum(np.isfinite(U), axis=0)
+    D = np.nan_to_num(U - np.nanmean(U, axis=0))
+    return (D.T @ D) / np.outer(used, used)
 
 
 def _eh_range(A_eq, b_eq, A_ub, b_ub, grid):
@@ -133,15 +155,21 @@ class MIInterval:
         return self.upper - self.lower
 
 
-def mi_interval(n: np.ndarray, L: int | None = None, slack: float = 2.0, max_L: int = 4,
-                min_levels: int = 100, grid_size: int = GRID_SIZE, n_mu: int = 21) -> MIInterval:
+def mi_interval(n: np.ndarray, L: int | None = None, slack: float | None = None, max_L: int = 4,
+                min_levels: int = 100, grid_size: int = GRID_SIZE, n_mu: int = 21,
+                region: str = "pca", level: float = 0.95) -> MIInterval:
     """
     Interval for ``I(X;Y)`` from a ``(kx, 2)`` count matrix.
 
-    The moments ``m_1..m_L`` may vary within ``slack`` standard errors of their estimates
-    (``slack=0`` gives the identified interval at the plug-in moments). For each of
-    ``n_mu`` values of ``m_1`` in its box, ``E h`` is minimized and maximized by linear
-    programming, and the interval is the range of ``h(m_1) - E h`` over them.
+    The moments ``m_1..m_L`` may vary within a confidence region around their estimates.
+    ``region="pca"`` (default) is a box in the principal axes of :func:`moment_covariance`,
+    ``|v_i' (m - m_hat)| <= c sqrt(lambda_i)``, with ``c`` the Sidak quantile that makes it a
+    joint ``level`` region for Gaussian estimates. ``region="box"`` is the per-moment box
+    ``|m_j - m_hat_j| <= slack se_j`` (``slack`` defaults to 2), which ignores the
+    correlation between the moments. Either way ``slack`` overrides ``c`` and ``slack=0``
+    gives the identified interval at the plug-in moments. For each of ``n_mu`` values of
+    ``m_1`` in the region, ``E h`` is minimized and maximized by linear programming, and the
+    interval is the range of ``h(m_1) - E h`` over them.
 
     ``L=None`` picks the largest ``L <= max_L`` with at least ``min_levels`` levels seen
     ``L`` or more times (at least 1). Higher moments rest on fewer levels, so their noise
@@ -154,15 +182,26 @@ def mi_interval(n: np.ndarray, L: int | None = None, slack: float = 2.0, max_L: 
     if np.isnan(m).any():
         raise ValueError(f"no level is seen {L} times; use a smaller L")
     se = np.where(np.isfinite(se), se, 0.0)
-    half = slack * se
     grid = np.linspace(0.0, 1.0, grid_size)
     powers = np.vstack([grid ** j for j in range(1, L + 1)])
     A_eq = np.vstack([np.ones_like(grid), grid])
-    A_ub = np.vstack([powers[1:], -powers[1:]]) if L > 1 else None
-    b_ub = np.concatenate([m[1:] + half[1:], -(m[1:] - half[1:])]) if L > 1 else None
-    mu_lo, mu_hi = max(m[0] - half[0], 0.0), min(m[0] + half[0], 1.0)
+    if region == "box":
+        half = (2.0 if slack is None else slack) * se
+        A_ub = np.vstack([powers[1:], -powers[1:]]) if L > 1 else None
+        b_ub = np.concatenate([m[1:] + half[1:], -(m[1:] - half[1:])]) if L > 1 else None
+        mu_half = half[0]
+    elif region == "pca":
+        c = norm.ppf(0.5 + level ** (1.0 / L) / 2) if slack is None else slack
+        lam, V = np.linalg.eigh(moment_covariance(n, L))
+        r = c * np.sqrt(np.clip(lam, 0.0, None))
+        A_ub = np.vstack([V.T @ powers, -(V.T @ powers)])
+        b_ub = np.concatenate([V.T @ m + r, -(V.T @ m - r)])
+        mu_half = float(np.abs(V[0]) @ r)
+    else:
+        raise ValueError(f"unknown region {region!r}; use 'pca' or 'box'")
+    mu_lo, mu_hi = max(m[0] - mu_half, 0.0), min(m[0] + mu_half, 1.0)
     lows, highs = [], []
-    for mu in np.unique(np.linspace(mu_lo, mu_hi, n_mu if half[0] > 0 else 1)):
+    for mu in np.unique(np.linspace(mu_lo, mu_hi, n_mu if mu_half > 0 else 1)):
         lo, hi = _eh_range(A_eq, np.array([1.0, mu]), A_ub, b_ub, grid)
         if np.isnan(lo):
             continue

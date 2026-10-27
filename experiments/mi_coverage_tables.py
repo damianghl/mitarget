@@ -5,9 +5,12 @@ point estimates, per (pool, shuffled, nbar).
     python experiments/mi_coverage_tables.py --raw raw/ --out tables/
 
 ``summary.csv`` columns: ``cov_mom`` (moment interval covers the population ``I``),
-``cov_cred`` (credible interval covers ``I``), ``cov_cred_count`` (credible interval covers
-the count-weighted value it is built for), ``width_*`` (mean width), ``L_med`` (median ``L``
-of the moment interval), and ``bias_*`` / ``rmse_*`` of each point estimate against ``I``.
+``cov_box`` (the same with the per-moment box), ``cov_cred`` (credible interval covers ``I``),
+``cov_cred_count`` (credible interval covers the count-weighted value it is built for),
+``width_*`` (mean width; ``width_id`` is the identified interval at the population moments,
+the part of the moment interval's width that more levels of the same sizes cannot remove),
+``L_med`` (median ``L`` of the moment interval), and ``bias_*`` / ``rmse_*`` of each point
+estimate against ``I``.
 ``cov_se`` is the binomial standard error of a coverage near 0.95.
 """
 
@@ -29,15 +32,20 @@ def summarise(d: pd.DataFrame) -> pd.DataFrame:
                  hit_mom=(d.mom_lo <= d.I_true) & (d.I_true <= d.mom_hi),
                  hit_cred=(d.cred_lo <= d.I_true) & (d.I_true <= d.cred_hi),
                  hit_cred_count=(d.cred_lo <= d.I_count) & (d.I_count <= d.cred_hi),
-                 width_mom=d.mom_hi - d.mom_lo, width_cred=d.cred_hi - d.cred_lo)
+                 hit_box=(d.box_lo <= d.I_true) & (d.I_true <= d.box_hi),
+                 width_mom=d.mom_hi - d.mom_lo, width_cred=d.cred_hi - d.cred_lo,
+                 width_box=d.box_hi - d.box_lo, width_id=d.id_hi - d.id_lo)
     agg = dict(reps=("rep", "size"), N=("N", "first"), I=("I_true", "mean"), F1_N=("F1", "mean"),
                K2=("K2", "mean"), L_med=("mom_L", "median"),
-               cov_mom=("hit_mom", "mean"), cov_cred=("hit_cred", "mean"),
+               cov_mom=("hit_mom", "mean"), cov_cred=("hit_cred", "mean"), cov_box=("hit_box", "mean"),
                cov_cred_count=("hit_cred_count", "mean"),
                width_mom=("width_mom", "mean"), width_cred=("width_cred", "mean"),
+               width_box=("width_box", "mean"), width_id=("width_id", "mean"),
                cred_sd=("cred_sd", "mean"), cred_sd_beta=("cred_sd_beta", "mean"),
                mom_lo=("mom_lo", "median"), mom_hi=("mom_hi", "median"),
-               cred_lo=("cred_lo", "median"), cred_hi=("cred_hi", "median"))
+               cred_lo=("cred_lo", "median"), cred_hi=("cred_hi", "median"),
+               box_lo=("box_lo", "median"), box_hi=("box_hi", "median"),
+               id_lo=("id_lo", "median"), id_hi=("id_hi", "median"))
     out = d.groupby(KEYS, dropna=False).agg(**agg).reset_index()
     out["F1_N"] = out.F1_N / out.N
     out["cov_se"] = np.sqrt(0.95 * 0.05 / out.reps)
@@ -60,7 +68,8 @@ def main(argv=None):
     a.out.mkdir(parents=True, exist_ok=True)
     s = summarise(d)
     s.to_csv(a.out / "summary.csv", index=False)
-    cols = ["pool", "shuffled", "nbar", "I", "F1_N", "L_med", "cov_mom", "width_mom", "cov_cred",
+    cols = ["pool", "shuffled", "nbar", "I", "F1_N", "L_med", "cov_mom", "width_mom", "cov_box", "width_box",
+            "width_id", "cov_cred",
             "cov_cred_count", "width_cred", "bias_baseline", "bias_npmle", "bias_mom_mid", "rmse_baseline"]
     with pd.option_context("display.width", 250, "display.max_rows", 500):
         print(s[cols].round(3).to_string(index=False))

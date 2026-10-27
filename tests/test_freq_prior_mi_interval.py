@@ -4,7 +4,7 @@ from scipy.special import expit
 
 from mitarget import (
     BayesianTargetEncoder, fit_counts, fit_freq_prior, identified_interval, mi_interval,
-    moment_estimates, worst_case_halfwidth,
+    moment_covariance, moment_estimates, worst_case_halfwidth,
 )
 from mitarget.metrics import exact_mutual_information, excess_cross_entropy
 
@@ -110,6 +110,28 @@ def test_mi_interval_from_data_covers_truth():
     r0 = mi_interval(n, L=2, slack=0)
     assert r.lower <= r0.lower <= r0.upper <= r.upper
     assert mi_interval(n, max_L=3).L == 3
+
+
+def test_mi_interval_principal_axes_region():
+    rng = np.random.default_rng(5)
+    atoms, w = np.array([0.2, 0.3, 0.85]), np.array([0.3, 0.4, 0.3])
+    q = rng.choice(atoms, size=100_000, p=w)
+    nx = rng.poisson(5.0, q.size)
+    k = rng.binomial(nx, q)
+    n = np.stack([nx - k, k], axis=1).astype(float)
+    m, se, _ = moment_estimates(n, 4)
+    C = moment_covariance(n, 4)
+    assert np.allclose(np.sqrt(np.diag(C)), se, rtol=0.01)
+    assert np.all(np.linalg.eigvalsh(C) > 0) and C[0, 3] / np.sqrt(C[0, 0] * C[3, 3]) > 0.5
+    true_I = exact_mutual_information(w, np.stack([1 - atoms, atoms], axis=1))
+    pca, box = mi_interval(n), mi_interval(n, region="box")
+    assert pca.lower <= true_I <= pca.upper and box.lower <= true_I <= box.upper
+    # the moments are strongly correlated at nbar = 5, so the rotated region is much narrower
+    assert pca.width < 0.6 * box.width
+    ident = identified_interval(_atoms_moments(atoms, w, 4))
+    assert pca.lower <= ident[0] and ident[1] <= pca.upper
+    with pytest.raises(ValueError):
+        mi_interval(n, region="ellipse")
 
 
 def test_credible_interval_beta_moments_and_coverage():

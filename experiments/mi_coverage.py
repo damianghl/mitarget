@@ -20,10 +20,15 @@ the population value ``I = h(sum_j p_j q_j) - sum_j p_j h(q_j)``. The credible i
 built for the count-weighted value ``h(mu) - sum_x (n_x / N) h(q_x)`` over the seen levels,
 whose mean is ``I`` (Lemma ``lem:rep``); its coverage of that value is reported too.
 
-One output row per training set: the two intervals (95%; the moment interval uses a box of
-``--slack`` standard errors and the largest ``L <= --max-L`` with at least 100 levels seen
-``L`` times), the point estimates (plug-in, baseline, credible mean, NPMLE, frequency prior,
-moment midpoint) and the level-size profile. ``mi_coverage_tables.py`` summarises them.
+One output row per training set: the intervals (95%), the point estimates (plug-in, baseline,
+credible mean, NPMLE, frequency prior, moment midpoint) and the level-size profile.
+``mi_coverage_tables.py`` summarises them. The moment interval uses the largest
+``L <= --max-L`` with at least 100 levels seen ``L`` times, and is computed twice: with the
+default joint region of ``mi_interval`` (a Sidak box in the principal axes of the moment
+covariance; ``mom_*``) and with the per-moment box of ``--slack`` standard errors
+(``box_*``). ``id_*`` is the identified interval at the same ``L`` from the population's own
+row-weighted moments ``sum_j p_j q_j^l``: the width no amount of data on levels seen at most
+``L`` times can remove, which always contains ``I``.
 """
 
 from __future__ import annotations
@@ -36,7 +41,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from mitarget import credible_interval, fit_counts, mi_interval, plugin_information
+from mitarget import credible_interval, fit_counts, identified_interval, mi_interval, plugin_information
 from mitarget.mi_interval import binary_entropy
 
 NBAR_SYNTH = (0.5, 1, 2, 5)
@@ -87,11 +92,17 @@ def evaluate(p, q, N, rng, slack, max_L):
 
     t0 = time.perf_counter()
     try:
-        mi = mi_interval(n, slack=slack, max_L=max_L)
+        mi = mi_interval(n, max_L=max_L)
         row.update(mom_L=mi.L, mom_lo=mi.lower, mom_hi=mi.upper)
+        row["id_lo"], row["id_hi"] = identified_interval([p @ q ** j for j in range(1, mi.L + 1)])
     except ValueError:
-        row.update(mom_L=np.nan, mom_lo=np.nan, mom_hi=np.nan)
+        row.update(mom_L=np.nan, mom_lo=np.nan, mom_hi=np.nan, id_lo=np.nan, id_hi=np.nan)
     row["mom_seconds"] = time.perf_counter() - t0
+    try:
+        bx = mi_interval(n, slack=slack, max_L=max_L, region="box")
+        row.update(box_lo=bx.lower, box_hi=bx.upper)
+    except ValueError:
+        row.update(box_lo=np.nan, box_hi=np.nan)
     cr = credible_interval(n)
     row.update(cred_mean=cr.mean, cred_sd=cr.sd, cred_lo=cr.lower, cred_hi=cr.upper,
                cred_sd_beta=cr.sd_beta, beta_star=cr.beta_star)
@@ -137,7 +148,7 @@ def main(argv=None):
     ap.add_argument("--priors", nargs="*", default=list(PRIORS), help="synthetic: priors to run")
     ap.add_argument("--nbar", type=float, nargs="*", default=None)
     ap.add_argument("--reps", type=int, default=100)
-    ap.add_argument("--slack", type=float, default=2.0)
+    ap.add_argument("--slack", type=float, default=2.0, help="half-width of the per-moment box, in SEs")
     ap.add_argument("--max-L", type=int, default=4)
     ap.add_argument("--seed", type=int, default=2026)
     ap.add_argument("--jobs", type=int, default=1)
