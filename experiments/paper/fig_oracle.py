@@ -4,7 +4,8 @@ Section 7.2 figures from the real-data subsampling oracle (experiment A and its 
 fig_oracle.pdf     share of the achievable gain lost vs mean level size nbar, one panel per pool
 fig_gap_by_n.pdf   where the baseline's gap lives: split by training level size at nbar = 2
 tab_oracle.tex     gap to the oracle at nbar = 2, by method, with the share of the baseline's gap
-                   closed by the unseen correction, the frequency prior and the NPMLE (paired SE)
+                   closed by the unseen correction, the Robbins correction (n <= 1), the
+                   frequency prior and the NPMLE (paired SE)
 
 Inputs are the ``summary.csv``, ``paired.csv`` and ``baseline_gap_by_n.csv`` files written by
 ``experiments/realdata_oracle_tables.py``.
@@ -92,8 +93,9 @@ def tab_oracle(summary, gap, paired, corr, out, nbar=2.0):
     s = summary[(summary.nbar == nbar) & (~summary.shuffled)]
     g = gap[(gap.nbar == nbar) & (~gap.shuffled)].set_index("feature")
     pr = paired[(paired.nbar == nbar) & (~paired.shuffled)].set_index(["feature", "method"])
-    cols = ["baseline", "baseline_unseen", "freq_prior", "npmle", "fixed_m20", "beta_mm", "oracle_blind"]
-    closed = ["baseline_unseen", "freq_prior", "npmle"]
+    cols = ["baseline", "baseline_unseen", "baseline_robbins", "freq_prior", "npmle", "fixed_m20", "beta_mm",
+            "oracle_blind"]
+    closed = ["baseline_unseen", "baseline_robbins", "freq_prior", "npmle"]
     main, full = [], []
     for feat, title in POOLS:
         r = s[s.feature == feat].set_index("method")
@@ -113,14 +115,14 @@ def tab_oracle(summary, gap, paired, corr, out, nbar=2.0):
         # appendix: gap to the oracle of every method
         full.append(" & ".join([name] + gaps) + " \\\\")
     head = ("pool & corr & gain & baseline gap & gap at $n_x\\le1$"
-            " & closed: +unseen & freq.\\ prior & NPMLE \\\\")
-    head_full = ("pool & baseline & +unseen & freq.\\ prior & NPMLE"
+            " & closed: +unseen & +Robbins & freq.\\ prior & NPMLE \\\\")
+    head_full = ("pool & baseline & +unseen & +Robbins & freq.\\ prior & NPMLE"
                  " & $m{=}20$ & matched beta & blind oracle \\\\")
     with open(out, "w") as fh:
-        fh.write("\n".join(["\\begin{tabular}{l r r r r r r r}", "\\toprule", head, "\\midrule",
+        fh.write("\n".join(["\\begin{tabular}{l r r r r r r r r}", "\\toprule", head, "\\midrule",
                              *main, "\\bottomrule", "\\end{tabular}", ""]))
     with open(out.replace(".tex", "_gaps.tex"), "w") as fh:
-        fh.write("\n".join(["\\begin{tabular}{l r r r r r r r}", "\\toprule", head_full, "\\midrule",
+        fh.write("\n".join(["\\begin{tabular}{l r r r r r r r r}", "\\toprule", head_full, "\\midrule",
                              *full, "\\bottomrule", "\\end{tabular}", ""]))
 
 

@@ -25,7 +25,8 @@ MAIN = [
     ("amazon/RESOURCE", "Amazon RESOURCE"),
     ("employee_salaries/position_title", "employee\\_salaries$^\\dagger$"),
 ]
-METHODS = [("Baseline + unseen correction", "+unseen"), ("NPMLE", "NPMLE"),
+METHODS = [("Baseline + unseen correction", "+unseen"), ("Baseline + Robbins (n<=1)", "+Robbins"),
+           ("NPMLE", "NPMLE"),
            ("Frequency prior", "freq.\\ prior"), ("GLMM", "GLMM"), ("Fixed m=20", "$m{=}20$"),
            ("CatBoost TS (a=1)", "CatBoost TS")]
 ALPHA = 0.01
