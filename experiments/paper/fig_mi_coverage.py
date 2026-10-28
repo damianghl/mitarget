@@ -1,10 +1,11 @@
 """
 Section 7.4 figure and table: coverage of the intervals for I(X;Y).
 
-fig_mi_coverage.pdf   true I, the baseline estimate and the median 95% credible and moment intervals
-                      vs nbar, for three populations
-tab_mi_coverage.tex   coverage and mean width of both intervals at nbar = 1 and 5, synthetic priors
-                      (10^5 equally popular levels) and the oracle pools (real and shuffled)
+fig_mi_coverage.pdf   true I, the baseline estimate, the median 95% credible and moment intervals and
+                      the identified interval at the population moments vs nbar, for three populations
+tab_mi_coverage.tex   coverage and mean width of both intervals, and the width of the identified
+                      interval, at nbar = 1 and 5, synthetic priors (10^5 equally popular levels) and
+                      the oracle pools (real and shuffled)
 
 Input: the ``summary.csv`` written by ``experiments/mi_coverage_tables.py``.
 
@@ -51,6 +52,8 @@ def fig(s, out):
                         label="moment interval")
         ax.fill_between(x, g.cred_lo, g.cred_hi, color=COLORS["baseline"], alpha=0.35, lw=0,
                         label="credible interval")
+        ax.plot(x, g.id_lo, color=COLORS["ref"], lw=0.8, ls=":", label="identified")
+        ax.plot(x, g.id_hi, color=COLORS["ref"], lw=0.8, ls=":")
         ax.plot(x, g.I, color="black", lw=1.2, label="true $I$")
         ax.plot(x, g.I + g.bias_baseline, color=COLORS["baseline"], marker="s", label="baseline")
         ax.plot(x, g.I + g.bias_npmle, color=COLORS["npmle"], marker="v", ls="--", label="NPMLE")
@@ -62,7 +65,7 @@ def fig(s, out):
         ax.set_ylim(0, 1.05 * float(np.nanmax(g.mom_hi)))
     axes[0].set_ylabel("$I(X;Y)$ (nats)")
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=5, frameon=False, bbox_to_anchor=(0.5, -0.1))
+    fig.legend(handles, labels, loc="lower center", ncol=6, frameon=False, bbox_to_anchor=(0.5, -0.1))
     fig.tight_layout()
     fig.savefig(out)
 
@@ -72,24 +75,25 @@ def _cells(g):
     for nbar in NBARS:
         r = g[g.nbar == nbar]
         if r.empty:
-            out += ["--"] * 4
+            out += ["--"] * 5
             continue
         r = r.iloc[0]
-        out += [f"{r.cov_cred:.2f}", f"{r.width_cred:.3f}", f"{r.cov_mom:.2f}", f"{r.width_mom:.3f}"]
+        out += [f"{r.cov_cred:.2f}", f"{r.width_cred:.3f}", f"{r.cov_mom:.2f}", f"{r.width_mom:.3f}",
+                f"{r.width_id:.3f}"]
     return out
 
 
 def table(s, out):
-    lines = [r"\begin{tabular}{lr cccc cccc}", r"\toprule",
-             r" & & \multicolumn{4}{c}{$\bar n=1$} & \multicolumn{4}{c}{$\bar n=5$}\\",
-             r"\cmidrule(lr){3-6}\cmidrule(lr){7-10}",
-             r"population & $I$ & cred. & width & mom. & width & cred. & width & mom. & width\\",
-             r"\midrule", r"\multicolumn{10}{l}{\emph{synthetic, $10^5$ equally popular levels}}\\"]
+    lines = [r"\begin{tabular}{lr ccccc ccccc}", r"\toprule",
+             r" & & \multicolumn{5}{c}{$\bar n=1$} & \multicolumn{5}{c}{$\bar n=5$}\\",
+             r"\cmidrule(lr){3-7}\cmidrule(lr){8-12}",
+             " & ".join(["population", "$I$"] + ["cred.", "width", "mom.", "width", "ident."] * 2) + r"\\",
+             r"\midrule", r"\multicolumn{12}{l}{\emph{synthetic, $10^5$ equally popular levels}}\\"]
     for prior, label in PRIORS:
         g = s[s.pool == f"{prior}|{SYNTH}"]
         lines.append(" & ".join([label, f"{g.I.mean():.3f}"] + _cells(g)) + r"\\")
     for shuffled, head in [(False, "oracle pools, real"), (True, "oracle pools, shuffled $q$")]:
-        lines += [r"\midrule", rf"\multicolumn{{10}}{{l}}{{\emph{{{head}}}}}\\"]
+        lines += [r"\midrule", rf"\multicolumn{{12}}{{l}}{{\emph{{{head}}}}}\\"]
         for pool, label in POOLS:
             g = s[(s.pool == pool) & (s.shuffled == shuffled)]
             lines.append(" & ".join([label, f"{g.I.mean():.3f}"] + _cells(g)) + r"\\")

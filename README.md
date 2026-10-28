@@ -54,8 +54,9 @@ prior of `q(y=1 | x)`, so `I(X;Y)` is only partially identified: singletons
 alone give `[0, H(Y)]`, and the worst-case half-width is about `0.22 / L^2`
 nats. `mi_interval` returns that interval from a binary count matrix (two
 linear programmes per value of the label rate, with the estimated moments
-allowed to vary within `slack` standard errors); the beta estimators return one
-point inside it.
+allowed to vary within a joint 95% region: a box in the principal axes of their
+covariance, or with `region="box"` the older per-moment box of `slack` standard
+errors); the beta estimators return one point inside it.
 
 ```python
 from mitarget import counts_from_labels, fit_baseline, mi_interval
