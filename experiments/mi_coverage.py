@@ -28,7 +28,13 @@ default joint region of ``mi_interval`` (a Sidak box in the principal axes of th
 covariance; ``mom_*``) and with the per-moment box of ``--slack`` standard errors
 (``box_*``). ``id_*`` is the identified interval at the same ``L`` from the population's own
 row-weighted moments ``sum_j p_j q_j^l``: the width no amount of data on levels seen at most
-``L`` times can remove, which always contains ``I``.
+``L`` times can remove, which always contains ``I``. ``lik_*`` is the likelihood-region interval
+(``mi_interval(region="likelihood")``): every prior whose likelihood for the table of
+``(n_x, k_x)`` is within ``chi2_1(0.95) / 2`` of the NPMLE.
+
+``--lik-only`` redraws the same training sets (same seeds) and computes only the likelihood
+interval, to add it to an existing run; it writes ``lik_coverage_*.csv`` next to the
+``mi_coverage_*.csv`` files, and ``mi_coverage_tables.py`` merges them by data set.
 """
 
 from __future__ import annotations
@@ -74,7 +80,18 @@ def draw_p(popularity, K, rng):
     return w / w.sum()
 
 
-def evaluate(p, q, N, rng, slack, max_L):
+def likelihood_columns(n):
+    t0 = time.perf_counter()
+    try:
+        lk = mi_interval(n, region="likelihood")
+        row = dict(lik_lo=lk.lower, lik_hi=lk.upper)
+    except ValueError:
+        row = dict(lik_lo=np.nan, lik_hi=np.nan)
+    row["lik_seconds"] = time.perf_counter() - t0
+    return row
+
+
+def evaluate(p, q, N, rng, slack, max_L, lik_only=False):
     """Draw one training set of N rows from the population (p, q) and fit everything."""
     K = len(p)
     level = rng.choice(K, size=N, p=p)
@@ -89,6 +106,9 @@ def evaluate(p, q, N, rng, slack, max_L):
     row = dict(N=N, I_true=I_true, I_count=I_count, F1=int((nx == 1).sum()), F2=int((nx == 2).sum()),
                K2=int((nx >= 2).sum()), K3=int((nx >= 3).sum()), K4=int((nx >= 4).sum()),
                nmax=int(nx.max()))
+    row.update(likelihood_columns(n))
+    if lik_only:
+        return row
 
     t0 = time.perf_counter()
     try:
@@ -112,19 +132,19 @@ def evaluate(p, q, N, rng, slack, max_L):
 
 
 def _synthetic_task(args):
-    prior, K, popularity, nbar, rep, seed, slack, max_L = args
+    prior, K, popularity, nbar, rep, seed, slack, max_L, lik_only = args
     rng = np.random.default_rng([seed, rep, int(nbar * 100), K, list(PRIORS).index(prior),
                                  int(popularity == "lognormal")])
     q, p = draw_q(prior, K, rng), draw_p(popularity, K, rng)
-    row = evaluate(p, q, int(round(nbar * K)), rng, slack, max_L)
+    row = evaluate(p, q, int(round(nbar * K)), rng, slack, max_L, lik_only)
     return dict(pool=f"{prior}|K={K}|{popularity}", prior=prior, K=K, popularity=popularity,
                 shuffled=False, nbar=nbar, rep=rep, **row)
 
 
 def _oracle_task(args):
-    name, shuffled, p, q, nbar, rep, seed, slack, max_L = args
+    name, shuffled, p, q, nbar, rep, seed, slack, max_L, lik_only = args
     rng = np.random.default_rng([seed, rep, int(nbar * 100)])
-    row = evaluate(p, q, int(round(nbar * len(p))), rng, slack, max_L)
+    row = evaluate(p, q, int(round(nbar * len(p))), rng, slack, max_L, lik_only)
     return dict(pool=name, prior="real", K=len(p), popularity="real", shuffled=shuffled, nbar=nbar,
                 rep=rep, **row)
 
@@ -152,26 +172,31 @@ def main(argv=None):
     ap.add_argument("--max-L", type=int, default=4)
     ap.add_argument("--seed", type=int, default=2026)
     ap.add_argument("--jobs", type=int, default=1)
+    ap.add_argument("--lik-only", action="store_true",
+                    help="only the likelihood interval, on the same data sets (lik_coverage_*.csv)")
+    ap.add_argument("--tag", default=None, help="synthetic: suffix of the output file (default: none)")
     ap.add_argument("--out", type=Path, required=True, help="output folder")
     a = ap.parse_args(argv)
     a.out.mkdir(parents=True, exist_ok=True)
 
     if a.mode == "synthetic":
         nbars = a.nbar or NBAR_SYNTH
-        tasks = [(prior, K, pop, nbar, rep, a.seed, a.slack, a.max_L) for prior in a.priors
+        tasks = [(prior, K, pop, nbar, rep, a.seed, a.slack, a.max_L, a.lik_only) for prior in a.priors
                  for K, pop in SYNTH_POOLS for nbar in nbars for rep in range(a.reps)]
-        fn, path = _synthetic_task, a.out / "mi_coverage_synthetic.csv"
+        fn, path = _synthetic_task, a.out / f"mi_coverage_synthetic{'_' + a.tag if a.tag else ''}.csv"
     else:
         name = a.name or a.feature
         p, q = load_population(a.data, a.feature, a.min_rows)
         if a.shuffle:
             q = np.random.default_rng(a.seed + 1).permutation(q)
         nbars = a.nbar or NBAR_ORACLE
-        tasks = [(name, a.shuffle, p, q, nbar, rep, a.seed, a.slack, a.max_L) for nbar in nbars
+        tasks = [(name, a.shuffle, p, q, nbar, rep, a.seed, a.slack, a.max_L, a.lik_only) for nbar in nbars
                  for rep in range(a.reps)]
         fn = _oracle_task
         path = a.out / f"mi_coverage_{name}_{'shuffled' if a.shuffle else 'real'}.csv"
         print(f"{name}{' (shuffled)' if a.shuffle else ''}: K={len(p)} levels", flush=True)
+    if a.lik_only:
+        path = path.with_name(path.name.replace("mi_coverage_", "lik_coverage_"))
 
     t0, rows = time.time(), []
     with ProcessPoolExecutor(a.jobs) as ex:

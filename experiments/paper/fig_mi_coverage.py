@@ -7,6 +7,9 @@ tab_mi_coverage.tex   coverage and mean width of both intervals, and the width o
                       interval, at nbar = 1 and 5, synthetic priors (10^5 equally popular levels) and
                       the oracle pools (real and shuffled)
 
+``--with-lik`` adds the likelihood-region interval (``cov_lik``, ``width_lik``; ``mi_coverage.py
+--lik-only``) as a band in the figure and two columns per nbar in the table.
+
 Input: the ``summary.csv`` written by ``experiments/mi_coverage_tables.py``.
 
     python fig_mi_coverage.py mi_tables/summary.csv
@@ -43,7 +46,7 @@ PANELS = [
 NBARS = (1.0, 5.0)
 
 
-def fig(s, out):
+def fig(s, out, with_lik=False):
     fig, axes = plt.subplots(1, 3, figsize=(6.8, 2.3))
     for ax, (pool, shuffled, title) in zip(axes, PANELS, strict=True):
         g = s[(s.pool == pool) & (s.shuffled == shuffled)].sort_values("nbar")
@@ -52,6 +55,9 @@ def fig(s, out):
                         label="moment interval")
         ax.fill_between(x, g.cred_lo, g.cred_hi, color=COLORS["baseline"], alpha=0.35, lw=0,
                         label="credible interval")
+        if with_lik:
+            ax.fill_between(x, g.lik_lo, g.lik_hi, color=COLORS["npmle"], alpha=0.25, lw=0,
+                            label="likelihood interval")
         ax.plot(x, g.id_lo, color=COLORS["ref"], lw=0.8, ls=":", label="identified")
         ax.plot(x, g.id_hi, color=COLORS["ref"], lw=0.8, ls=":")
         ax.plot(x, g.I, color="black", lw=1.2, label="true $I$")
@@ -65,38 +71,44 @@ def fig(s, out):
         ax.set_ylim(0, 1.05 * float(np.nanmax(g.mom_hi)))
     axes[0].set_ylabel("$I(X;Y)$ (nats)")
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=6, frameon=False, bbox_to_anchor=(0.5, -0.1))
+    fig.legend(handles, labels, loc="lower center", ncol=7 if with_lik else 6, frameon=False,
+               bbox_to_anchor=(0.5, -0.1))
     fig.tight_layout()
     fig.savefig(out)
 
 
-def _cells(g):
+def _cells(g, with_lik=False):
     out = []
     for nbar in NBARS:
         r = g[g.nbar == nbar]
         if r.empty:
-            out += ["--"] * 5
+            out += ["--"] * (7 if with_lik else 5)
             continue
         r = r.iloc[0]
-        out += [f"{r.cov_cred:.2f}", f"{r.width_cred:.3f}", f"{r.cov_mom:.2f}", f"{r.width_mom:.3f}",
-                f"{r.width_id:.3f}"]
+        out += [f"{r.cov_cred:.2f}", f"{r.width_cred:.3f}", f"{r.cov_mom:.2f}", f"{r.width_mom:.3f}"]
+        if with_lik:
+            out += [f"{r.cov_lik:.2f}", f"{r.width_lik:.3f}"]
+        out.append(f"{r.width_id:.3f}")
     return out
 
 
-def table(s, out):
-    lines = [r"\begin{tabular}{lr ccccc ccccc}", r"\toprule",
-             r" & & \multicolumn{5}{c}{$\bar n=1$} & \multicolumn{5}{c}{$\bar n=5$}\\",
-             r"\cmidrule(lr){3-7}\cmidrule(lr){8-12}",
-             " & ".join(["population", "$I$"] + ["cred.", "width", "mom.", "width", "ident."] * 2) + r"\\",
-             r"\midrule", r"\multicolumn{12}{l}{\emph{synthetic, $10^5$ equally popular levels}}\\"]
+def table(s, out, with_lik=False):
+    m = 7 if with_lik else 5
+    heads = ["cred.", "width", "mom.", "width"] + (["lik.", "width"] if with_lik else []) + ["ident."]
+    lines = [rf"\begin{{tabular}}{{lr {'c' * m} {'c' * m}}}", r"\toprule",
+             rf" & & \multicolumn{{{m}}}{{c}}{{$\bar n=1$}} & \multicolumn{{{m}}}{{c}}{{$\bar n=5$}}\\",
+             rf"\cmidrule(lr){{3-{2 + m}}}\cmidrule(lr){{{3 + m}-{2 + 2 * m}}}",
+             " & ".join(["population", "$I$"] + heads * 2) + r"\\",
+             r"\midrule",
+             rf"\multicolumn{{{2 + 2 * m}}}{{l}}{{\emph{{synthetic, $10^5$ equally popular levels}}}}\\"]
     for prior, label in PRIORS:
         g = s[s.pool == f"{prior}|{SYNTH}"]
-        lines.append(" & ".join([label, f"{g.I.mean():.3f}"] + _cells(g)) + r"\\")
+        lines.append(" & ".join([label, f"{g.I.mean():.3f}"] + _cells(g, with_lik)) + r"\\")
     for shuffled, head in [(False, "oracle pools, real"), (True, "oracle pools, shuffled $q$")]:
-        lines += [r"\midrule", rf"\multicolumn{{12}}{{l}}{{\emph{{{head}}}}}\\"]
+        lines += [r"\midrule", rf"\multicolumn{{{2 + 2 * m}}}{{l}}{{\emph{{{head}}}}}\\"]
         for pool, label in POOLS:
             g = s[(s.pool == pool) & (s.shuffled == shuffled)]
-            lines.append(" & ".join([label, f"{g.I.mean():.3f}"] + _cells(g)) + r"\\")
+            lines.append(" & ".join([label, f"{g.I.mean():.3f}"] + _cells(g, with_lik)) + r"\\")
     lines += [r"\bottomrule", r"\end{tabular}"]
     with open(out, "w") as f:
         f.write("\n".join(lines) + "\n")
@@ -107,10 +119,11 @@ def main():
     ap.add_argument("summary")
     ap.add_argument("--fig", default="fig_mi_coverage.pdf")
     ap.add_argument("--tab", default="tab_mi_coverage.tex")
+    ap.add_argument("--with-lik", action="store_true", help="add the likelihood-region interval")
     a = ap.parse_args()
     s = pd.read_csv(a.summary)
-    fig(s, a.fig)
-    table(s, a.tab)
+    fig(s, a.fig, a.with_lik)
+    table(s, a.tab, a.with_lik)
 
 
 if __name__ == "__main__":

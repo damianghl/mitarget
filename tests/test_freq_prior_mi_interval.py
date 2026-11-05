@@ -134,6 +134,28 @@ def test_mi_interval_principal_axes_region():
         mi_interval(n, region="ellipse")
 
 
+def test_mi_interval_likelihood_region():
+    pytest.importorskip("cvxpy")
+    rng = np.random.default_rng(6)
+    atoms, w = np.array([0.2, 0.3, 0.85]), np.array([0.3, 0.4, 0.3])
+    q = rng.choice(atoms, size=10_000, p=w)
+    nx = rng.poisson(2.0, q.size)
+    k = rng.binomial(nx, q)
+    n = np.stack([nx - k, k], axis=1).astype(float)
+    true_I = exact_mutual_information(w, np.stack([1 - atoms, atoms], axis=1))
+    lik, pca = mi_interval(n, region="likelihood"), mi_interval(n)
+    assert lik.lower <= true_I <= lik.upper
+    assert lik.width < 0.7 * pca.width
+    # slack=0 is the range over the NPMLEs, inside the 95% region
+    r0 = mi_interval(n, region="likelihood", slack=0)
+    assert lik.lower - 1e-4 <= r0.lower
+    assert r0.upper <= lik.upper + 1e-4 and r0.width < 0.5 * lik.width
+    # thinning large levels keeps the counts consistent
+    from mitarget.mi_interval import _thin
+    kk, nn = _thin(np.array([3.0, 400.0]), np.array([5.0, 1000.0]), 200)
+    assert nn.tolist() == [5.0, 200.0] and kk[0] == 3 and 0 <= kk[1] <= 200
+
+
 def test_credible_interval_beta_moments_and_coverage():
     from scipy import integrate, stats
 

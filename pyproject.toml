@@ -18,7 +18,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "ruff>=0.4"]
+dev = ["pytest>=7", "ruff>=0.4", "cvxpy>=1.4"]
+lik = ["cvxpy>=1.4"]
 plots = ["matplotlib>=3.6"]
 catboost = ["catboost>=1.2"]
 

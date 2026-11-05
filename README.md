@@ -66,6 +66,13 @@ fit_baseline(n).I_hat          # point estimate under the beta prior
 r = mi_interval(n)             # r.lower, r.upper, r.midpoint, r.L
 ```
 
+`mi_interval(n, region="likelihood")` skips the moments: it takes every prior
+whose likelihood for the table of level sizes and positives is within
+`chi2_1(0.95) / 2` of the NPMLE and returns the range of `I` over that convex
+set. Each cell then counts with its own precision and no `L` is chosen, which
+narrows the sampling part of the width; the identified part stays (needs
+`cvxpy`: `pip install -e ".[lik]"`).
+
 `identified_interval(moments)` gives the population interval for known
 moments, and `worst_case_halfwidth(L)` the bound `E_L(h)`.
 
