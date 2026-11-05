@@ -167,6 +167,8 @@ def main(argv=None):
     ap.add_argument("--shuffle", action="store_true", help="oracle: permute q_j across levels")
     ap.add_argument("--priors", nargs="*", default=list(PRIORS), help="synthetic: priors to run")
     ap.add_argument("--nbar", type=float, nargs="*", default=None)
+    ap.add_argument("--pools", nargs="*", default=None,
+                    help="synthetic: pools to run as K|popularity, e.g. 100000|uniform (default: all)")
     ap.add_argument("--reps", type=int, default=100)
     ap.add_argument("--slack", type=float, default=2.0, help="half-width of the per-moment box, in SEs")
     ap.add_argument("--max-L", type=int, default=4)
@@ -182,7 +184,8 @@ def main(argv=None):
     if a.mode == "synthetic":
         nbars = a.nbar or NBAR_SYNTH
         tasks = [(prior, K, pop, nbar, rep, a.seed, a.slack, a.max_L, a.lik_only) for prior in a.priors
-                 for K, pop in SYNTH_POOLS for nbar in nbars for rep in range(a.reps)]
+                 for K, pop in SYNTH_POOLS if a.pools is None or f"{K}|{pop}" in a.pools
+                 for nbar in nbars for rep in range(a.reps)]
         fn, path = _synthetic_task, a.out / f"mi_coverage_synthetic{'_' + a.tag if a.tag else ''}.csv"
     else:
         name = a.name or a.feature
