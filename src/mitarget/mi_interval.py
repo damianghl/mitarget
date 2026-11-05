@@ -21,6 +21,9 @@ uniform degree-``L`` polynomial approximation error of ``h``, about ``0.22 / L^2
   joint confidence region: by default a box in the principal axes of their covariance
   (Sidak-corrected, so it covers the moments jointly), or the older per-moment box of
   ``slack`` standard errors, which ignores their strong correlation and is conservative.
+  ``region="likelihood"`` skips the moments: it takes every prior whose likelihood for the
+  table of level sizes and positives is within ``chi2_1(level) / 2`` of the NPMLE, which weights
+  each cell by its own precision and needs no ``L`` (needs ``cvxpy``; ``pip install mitarget[lik]``).
 - :func:`worst_case_halfwidth`: ``E_L(h)``.
 - :func:`credible_interval`: the posterior mean and standard deviation of ``I`` under the
   beta prior of Hernandez & Samengo (2019, Appendix A), for comparison.
@@ -35,7 +38,8 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy.optimize import linprog
-from scipy.stats import norm
+from scipy.optimize import minimize_scalar
+from scipy.stats import binom, chi2, norm
 from scipy.special import digamma, entr, logsumexp, polygamma
 
 from .core import fit_beta_star, per_state_log_likelihood, qhat_y
@@ -157,7 +161,8 @@ class MIInterval:
 
 def mi_interval(n: np.ndarray, L: int | None = None, slack: float | None = None, max_L: int = 4,
                 min_levels: int = 100, grid_size: int = GRID_SIZE, n_mu: int = 21,
-                region: str = "pca", level: float = 0.95) -> MIInterval:
+                region: str = "pca", level: float = 0.95, lik_grid_size: int = 101,
+                n_cap: int = 200) -> MIInterval:
     """
     Interval for ``I(X;Y)`` from a ``(kx, 2)`` count matrix.
 
@@ -171,6 +176,12 @@ def mi_interval(n: np.ndarray, L: int | None = None, slack: float | None = None,
     ``m_1`` in the region, ``E h`` is minimized and maximized by linear programming, and the
     interval is the range of ``h(m_1) - E h`` over them.
 
+    ``region="likelihood"`` uses no moments: the region is the set of priors on a grid of
+    ``lik_grid_size`` points whose log-likelihood for the table of ``(n_x, k_x)`` is within
+    ``c = chi2_1(level) / 2`` of its maximum (the NPMLE), and the interval is the range of
+    ``I`` over it (see :func:`likelihood_interval`). ``slack`` overrides ``c``; ``slack=0`` gives
+    the range over the NPMLEs. ``L``, ``moments`` and ``se`` are then reported for reference only.
+
     ``L=None`` picks the largest ``L <= max_L`` with at least ``min_levels`` levels seen
     ``L`` or more times (at least 1). Higher moments rest on fewer levels, so their noise
     soon outweighs what they add.
@@ -182,6 +193,9 @@ def mi_interval(n: np.ndarray, L: int | None = None, slack: float | None = None,
     if np.isnan(m).any():
         raise ValueError(f"no level is seen {L} times; use a smaller L")
     se = np.where(np.isfinite(se), se, 0.0)
+    if region == "likelihood":
+        lo, hi = likelihood_interval(n, level=level, slack=slack, grid_size=lik_grid_size, n_cap=n_cap)
+        return MIInterval(lo, hi, L, m, se, used)
     grid = np.linspace(0.0, 1.0, grid_size)
     powers = np.vstack([grid ** j for j in range(1, L + 1)])
     A_eq = np.vstack([np.ones_like(grid), grid])
@@ -198,7 +212,7 @@ def mi_interval(n: np.ndarray, L: int | None = None, slack: float | None = None,
         b_ub = np.concatenate([V.T @ m + r, -(V.T @ m - r)])
         mu_half = float(np.abs(V[0]) @ r)
     else:
-        raise ValueError(f"unknown region {region!r}; use 'pca' or 'box'")
+        raise ValueError(f"unknown region {region!r}; use 'pca', 'box' or 'likelihood'")
     mu_lo, mu_hi = max(m[0] - mu_half, 0.0), min(m[0] + mu_half, 1.0)
     lows, highs = [], []
     for mu in np.unique(np.linspace(mu_lo, mu_hi, n_mu if mu_half > 0 else 1)):
@@ -211,6 +225,105 @@ def mi_interval(n: np.ndarray, L: int | None = None, slack: float | None = None,
     if not lows:
         raise ValueError("the estimated moments admit no prior; increase slack")
     return MIInterval(max(min(lows), 0.0), max(highs), L, m, se, used)
+
+
+def _thin(k, nx, n_cap, seed=0):
+    """Hypergeometric thinning of levels with more than ``n_cap`` rows down to ``n_cap`` rows."""
+    big = nx > n_cap
+    if not big.any():
+        return k, nx
+    rng = np.random.default_rng(seed)
+    k, nx = k.copy(), nx.copy()
+    k[big] = rng.hypergeometric(k[big].astype(np.int64), (nx[big] - k[big]).astype(np.int64), n_cap)
+    nx[big] = n_cap
+    return k, nx
+
+
+_CLARABEL_RETRIES = ({}, {"max_step_fraction": 0.9}, {"max_step_fraction": 0.7, "max_iter": 500})
+
+
+def likelihood_interval(n: np.ndarray, level: float = 0.95, slack: float | None = None,
+                        grid_size: int = 101, n_cap: int = 200) -> tuple[float, float]:
+    """
+    Likelihood-region interval for ``I(X;Y)`` from a ``(kx, 2)`` count matrix.
+
+    Under exchangeability a level with ``n_x`` rows has ``k_x`` positives with probability
+    ``P_pi(k | n) = int Binom(k; n, q) dpi(q)``, linear in ``pi``, so the log-likelihood
+    ``l(pi) = sum_x log P_pi(k_x | n_x)`` is concave and the region
+    ``C = {pi : l(pi) >= l(NPMLE) - c}`` is convex (``pi`` on a grid of ``grid_size`` points).
+    ``c = chi2_1(level) / 2`` by default (the profile-likelihood, or Wilks, choice for one scalar);
+    ``slack`` overrides it. The upper end, ``max h(E q) - E h(q)``, is one convex programme; the
+    lower end is a concave minimisation, done as a scan over ``mu = E q``, for which
+    ``h(mu) - max E h`` is a convex programme. This uses every cell of the table with its own
+    binomial noise, so precise cells (many doubletons) constrain more than noisy ones (few large
+    levels) and no moment order ``L`` is chosen. At the population marginal ``C`` reduces to the
+    identified set, so only the sampling part of the width can shrink. Levels with more than
+    ``n_cap`` rows are thinned to ``n_cap`` rows (hypergeometric, fixed seed): beyond that their
+    ``q_x`` is resolved finer than the grid. Ignatiadis & Wager (2022, JASA) build intervals for
+    empirical-Bayes functionals the same way ("F-localization"). Requires ``cvxpy``.
+    """
+    try:
+        import cvxpy as cp
+    except ImportError as e:  # pragma: no cover
+        raise ImportError("region='likelihood' needs cvxpy: pip install 'mitarget[lik]'") from e
+    k, nx = _binary_kn(n)
+    keep = nx > 0
+    k, nx = _thin(k[keep], nx[keep], n_cap)
+    cells, F = np.unique(np.column_stack([nx, k]), axis=0, return_counts=True)
+    M = F.sum()
+    G = np.linspace(0.0, 1.0, grid_size)
+    hG = binary_entropy(G)
+    B = binom.pmf(cells[:, 1:2], cells[:, 0:1], G[None, :])
+    w = cp.Variable(grid_size, nonneg=True)
+    ll = (F / M) @ cp.log(B @ w)
+
+    def solve(prob):
+        # the region is thin (c / M is small), so the interior-point solver sometimes stalls;
+        # shorter steps fix that
+        fallback = np.nan
+        for opts in _CLARABEL_RETRIES:
+            try:
+                prob.solve(solver="CLARABEL", **opts)
+            except cp.error.SolverError:
+                continue
+            if prob.status == "optimal":
+                return prob.value
+            if prob.status == "optimal_inaccurate" and np.isnan(fallback):
+                fallback = prob.value
+        return fallback
+
+    lhat = solve(cp.Problem(cp.Maximize(ll), [cp.sum(w) == 1]))
+    if not np.isfinite(lhat):
+        raise ValueError("the NPMLE did not converge")
+    c = chi2.ppf(level, 1) / 2 if slack is None else slack
+    cons = [cp.sum(w) == 1, ll >= lhat - c / M - 1e-9]
+    mean = G @ w
+    upper = solve(cp.Problem(cp.Maximize(cp.entr(mean) + cp.entr(1 - mean) - hG @ w), cons))
+    mu_lo = solve(cp.Problem(cp.Minimize(mean), cons))
+    mu_hi = solve(cp.Problem(cp.Maximize(mean), cons))
+    if not np.all(np.isfinite([upper, mu_lo, mu_hi])):
+        raise ValueError("the likelihood region could not be solved")
+    mu = cp.Parameter()
+    peh = cp.Problem(cp.Maximize(hG @ w), cons + [mean == mu])
+
+    def i_lo(x):
+        mu.value = float(x)
+        v = solve(peh)
+        return float(binary_entropy(x)) - v if np.isfinite(v) else np.inf
+
+    # the endpoints of the mu range are single points of C, where the solver struggles
+    eps = 1e-3 * (mu_hi - mu_lo)
+    xs = np.linspace(mu_lo + eps, mu_hi - eps, 7)
+    vals = np.array([i_lo(x) for x in xs])
+    j = int(np.argmin(vals))
+    a, b = xs[max(j - 1, 0)], xs[min(j + 1, len(xs) - 1)]
+    if not np.isfinite(vals[j]):
+        raise ValueError("the likelihood region could not be solved")
+    lower = vals[j]
+    if b > a:
+        r = minimize_scalar(i_lo, bounds=(a, b), method="bounded", options={"xatol": 1e-6 + 1e-3 * (b - a)})
+        lower = min(lower, r.fun)
+    return max(float(lower), 0.0), float(max(upper, lower))
 
 
 def worst_case_halfwidth(L: int, grid_size: int = GRID_SIZE) -> float:
