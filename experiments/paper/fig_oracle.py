@@ -47,7 +47,7 @@ def load(dirs, name):
 
 
 def fig_oracle(summary, out, corr):
-    fig, axes = plt.subplots(2, 3, figsize=(6.8, 4.2), sharex=True, sharey=True)
+    fig, axes = plt.subplots(2, 3, figsize=(6.8, 4.6), sharex=True, sharey=True)
     for ax, (feat, title) in zip(axes.flat, POOLS, strict=False):
         s = summary[summary.feature == feat]
         for method, shuffled, style in LINES:
@@ -61,8 +61,9 @@ def fig_oracle(summary, out, corr):
     for ax in axes[:, 0]:
         ax.set_ylabel("share of gain lost")
     handles, labels = axes[0, 0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=3, frameon=False, bbox_to_anchor=(0.5, -0.06))
-    fig.tight_layout()
+    # reserve a strip below the panels so the legend does not cover the bottom row's x labels
+    fig.tight_layout(rect=(0, 0.11, 1, 1))
+    fig.legend(handles, labels, loc="lower center", ncol=4, frameon=False, bbox_to_anchor=(0.5, 0.0))
     fig.savefig(out)
 
 
