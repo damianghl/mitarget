@@ -7,8 +7,12 @@ tab_mi_coverage.tex   coverage and mean width of both intervals, and the width o
                       interval, at nbar = 1 and 5, synthetic priors (10^5 equally popular levels) and
                       the oracle pools (real and shuffled)
 
-``--with-lik`` adds the likelihood-region interval (``cov_lik``, ``width_lik``; ``mi_coverage.py
---lik-only``) as a band in the figure and two columns per nbar in the table.
+``--with-lik`` adds the likelihood-region interval (``mi_coverage.py --lik-only``) as a band in the
+figure; ``--intervals`` picks the table's intervals. The paper uses
+
+    python fig_mi_coverage.py summary.csv --with-lik --intervals cred lik
+    python fig_mi_coverage.py summary.csv --fig full.pdf --tab tab_mi_coverage_full.tex \
+        --intervals cred mom lik
 
 Input: the ``summary.csv`` written by ``experiments/mi_coverage_tables.py``.
 
@@ -77,24 +81,26 @@ def fig(s, out, with_lik=False):
     fig.savefig(out)
 
 
-def _cells(g, with_lik=False):
+COLS = {"cred": "cred.", "mom": "mom.", "lik": "lik."}
+
+
+def _cells(g, intervals):
     out = []
     for nbar in NBARS:
         r = g[g.nbar == nbar]
         if r.empty:
-            out += ["--"] * (7 if with_lik else 5)
+            out += ["--"] * (2 * len(intervals) + 1)
             continue
         r = r.iloc[0]
-        out += [f"{r.cov_cred:.2f}", f"{r.width_cred:.3f}", f"{r.cov_mom:.2f}", f"{r.width_mom:.3f}"]
-        if with_lik:
-            out += [f"{r.cov_lik:.2f}", f"{r.width_lik:.3f}"]
+        for k in intervals:
+            out += [f"{r[f'cov_{k}']:.2f}", f"{r[f'width_{k}']:.3f}"]
         out.append(f"{r.width_id:.3f}")
     return out
 
 
-def table(s, out, with_lik=False):
-    m = 7 if with_lik else 5
-    heads = ["cred.", "width", "mom.", "width"] + (["lik.", "width"] if with_lik else []) + ["ident."]
+def table(s, out, intervals=("cred", "mom")):
+    m = 2 * len(intervals) + 1
+    heads = [h for k in intervals for h in (COLS[k], "width")] + ["ident."]
     lines = [rf"\begin{{tabular}}{{lr {'c' * m} {'c' * m}}}", r"\toprule",
              rf" & & \multicolumn{{{m}}}{{c}}{{$\bar n=1$}} & \multicolumn{{{m}}}{{c}}{{$\bar n=5$}}\\",
              rf"\cmidrule(lr){{3-{2 + m}}}\cmidrule(lr){{{3 + m}-{2 + 2 * m}}}",
@@ -103,12 +109,12 @@ def table(s, out, with_lik=False):
              rf"\multicolumn{{{2 + 2 * m}}}{{l}}{{\emph{{synthetic, $10^5$ equally popular levels}}}}\\"]
     for prior, label in PRIORS:
         g = s[s.pool == f"{prior}|{SYNTH}"]
-        lines.append(" & ".join([label, f"{g.I.mean():.3f}"] + _cells(g, with_lik)) + r"\\")
+        lines.append(" & ".join([label, f"{g.I.mean():.3f}"] + _cells(g, intervals)) + r"\\")
     for shuffled, head in [(False, "oracle pools, real"), (True, "oracle pools, shuffled $q$")]:
         lines += [r"\midrule", rf"\multicolumn{{{2 + 2 * m}}}{{l}}{{\emph{{{head}}}}}\\"]
         for pool, label in POOLS:
             g = s[(s.pool == pool) & (s.shuffled == shuffled)]
-            lines.append(" & ".join([label, f"{g.I.mean():.3f}"] + _cells(g, with_lik)) + r"\\")
+            lines.append(" & ".join([label, f"{g.I.mean():.3f}"] + _cells(g, intervals)) + r"\\")
     lines += [r"\bottomrule", r"\end{tabular}"]
     with open(out, "w") as f:
         f.write("\n".join(lines) + "\n")
@@ -119,11 +125,14 @@ def main():
     ap.add_argument("summary")
     ap.add_argument("--fig", default="fig_mi_coverage.pdf")
     ap.add_argument("--tab", default="tab_mi_coverage.tex")
-    ap.add_argument("--with-lik", action="store_true", help="add the likelihood-region interval")
+    ap.add_argument("--with-lik", action="store_true",
+                    help="add the likelihood-region interval to the figure")
+    ap.add_argument("--intervals", nargs="+", default=["cred", "mom"], choices=list(COLS),
+                    help="intervals in the table, in order (default: cred mom)")
     a = ap.parse_args()
     s = pd.read_csv(a.summary)
     fig(s, a.fig, a.with_lik)
-    table(s, a.tab, a.with_lik)
+    table(s, a.tab, a.intervals)
 
 
 if __name__ == "__main__":
