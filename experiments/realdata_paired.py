@@ -48,6 +48,7 @@ ROBBINS = "Baseline + Robbins (n<=1)"
 METHODS = {
     "Prior only": lambda n, x, y: np.tile(qhat_y(n), (n.shape[0], 1)),
     "Fixed m=20": lambda n, x, y: fit_counts(n, "fixed_m", m=20.0).encoding,
+    "CV m (LOO)": lambda n, x, y: fit_counts(n, "cv_m").encoding,
     BASELINE: lambda n, x, y: fit_counts(n, "baseline").encoding,
     UNSEEN: lambda n, x, y: fit_counts(n, "baseline_unseen").encoding,
     ROBBINS: lambda n, x, y: fit_counts(n, "baseline_robbins").encoding,
@@ -55,6 +56,7 @@ METHODS = {
     "Frequency prior": lambda n, x, y: fit_counts(n, "freq_prior").encoding,
     "GLMM": lambda n, x, y: fit_counts(n, "glmm").encoding,
     "NPMLE": lambda n, x, y: fit_counts(n, "npmle").encoding,
+    "NPMLE + Robbins (n<=1)": lambda n, x, y: fit_counts(n, "npmle_robbins").encoding,
     "CatBoost TS (a=1)": lambda n, x, y: fit_counts(n, "catboost_ts").encoding,
     "sklearn TargetEncoder (auto)": lambda n, x, y: sklearn_target_encoding(x, y, *n.shape),
 }

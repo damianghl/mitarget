@@ -93,6 +93,21 @@ reports the share of the baseline's gap to the full oracle it closes.
 dependence). Input files are tab-separated with the feature column and a
 `rating` column (`y = rating >= 4`).
 
+## Exchangeability tests
+
+```bash
+python experiments/exchangeability.py pools --data ml1m_ratings.tsv --feature movie_id --reps 50 --out exch_raw/
+python experiments/exchangeability.py pools --data ml1m_ratings.tsv --feature movie_id --shuffle --out exch_raw/
+python experiments/exchangeability.py tasks --data-root DATA --out exch_raw/
+python experiments/exchangeability.py summary --raw exch_raw/ --coverage mi_tables/summary.csv --out exch_tables/
+```
+
+Two tests of whether levels of every size share one prior for `q` (the assumption behind the MI
+intervals): `mitarget.stratum_moment_test`, a Wald test that the unbiased estimates of `m1` and `m2`
+agree across strata of level sizes, and the likelihood-ratio test of the frequency-aware prior.
+`pools` uses the same seed and draw order as `realdata_oracle.py`, so it tests the oracle's training
+sets; `summary` gives rejection rates per pool and `nbar` next to the likelihood interval's coverage.
+
 ## Coverage of the MI intervals
 
 ```bash

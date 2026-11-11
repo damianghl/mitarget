@@ -2,6 +2,13 @@
 Paper tables from the output of ``realdata_paired.py``.
 
     python experiments/realdata_tables.py --raw results/ --out tables/
+    python experiments/realdata_tables.py --raw old_results/ new_methods/ --out tables/
+
+With several ``--raw`` folders run on the same splits, the files are merged:
+a (task, rep, fold, method) row, a (task, rep, method pair) row or a
+(task, rep, method, bin) row is taken from the first folder that has it, so
+a later run that adds methods (and repeats the baseline) extends the earlier
+one. Holm's correction is then over the merged family of methods.
 
 Writes:
 
@@ -35,7 +42,8 @@ import pandas as pd
 from scipy import stats
 
 BASELINE = "K=1 baseline"
-REFERENCES = (BASELINE, "NPMLE")
+ROBBINS = "Baseline + Robbins (n<=1)"
+REFERENCES = (BASELINE, "NPMLE", ROBBINS)
 #: compact task names for tables (the OpenML loaders use long labels)
 SHORT = {
     "employee_salaries / employee_position_title (salary 4-quantile)": "employee_salaries/position_title",
@@ -46,14 +54,30 @@ SHORT = {
     "click_prediction_small / advertiser_id": "click_small/advertiser_id",
     "click_prediction_small / user_id": "click_small/user_id",
 }
-METHOD_ORDER = ["Prior only", "Fixed m=20", BASELINE, "Baseline + unseen correction",
-                "Baseline + Robbins (n<=1)", "Baseline + Robbins (n<=1) raw", "Frequency prior",
-                "GLMM", "NPMLE", "CatBoost TS (a=1)", "sklearn TargetEncoder (auto)"]
+METHOD_ORDER = ["Prior only", "Fixed m=20", "CV m (LOO)", BASELINE, "Baseline + unseen correction",
+                ROBBINS, "Baseline + Robbins (n<=1) raw", "Frequency prior",
+                "GLMM", "NPMLE", "NPMLE + Robbins (n<=1)", "CatBoost TS (a=1)",
+                "sklearn TargetEncoder (auto)"]
 
 
-def _read(raw: Path, prefix: str) -> pd.DataFrame:
-    files = sorted(raw.glob(f"{prefix}_*.csv"))
-    return pd.concat([pd.read_csv(f) for f in files], ignore_index=True) if files else pd.DataFrame()
+#: columns that identify a row of each raw file, for merging several runs
+KEYS = {"folds": ["task", "rep", "fold", "method"], "rows": ["task", "rep", "method_a", "method_b"],
+        "bins": ["task", "rep", "method", "bin"], "meta": ["task"]}
+
+
+def _read(raws, prefix: str) -> pd.DataFrame:
+    frames = []
+    for raw in raws if isinstance(raws, (list, tuple)) else [raws]:
+        files = sorted(Path(raw).glob(f"{prefix}_*.csv"))
+        frames += [pd.read_csv(f) for f in files]
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True)
+    if prefix == "rows":   # a pair may appear as (a, b) in one run and (b, a) in another
+        key = df[["method_a", "method_b"]].apply(lambda r: tuple(sorted(r)), axis=1)
+        return df[~pd.concat([df[["task", "rep"]], key.rename("pair")], axis=1).duplicated()].reset_index(
+            drop=True)
+    return df.drop_duplicates(KEYS[prefix], keep="first").reset_index(drop=True)
 
 
 def holm(p: np.ndarray) -> np.ndarray:
@@ -159,7 +183,8 @@ def main_table(ll, paired, by_n, meta) -> pd.DataFrame:
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--raw", type=Path, required=True, help="output folder of realdata_paired.py")
+    ap.add_argument("--raw", type=Path, nargs="+", required=True,
+                    help="output folder(s) of realdata_paired.py, run on the same splits")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)

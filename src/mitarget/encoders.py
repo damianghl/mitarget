@@ -23,7 +23,9 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 from sklearn.utils.validation import check_is_fitted
 
-from .baseline import doubleton_rates, doubleton_test, fit_baseline, singleton_rate
+from .baseline import (
+    doubleton_rates, doubleton_test, doubleton_test_pairs, fit_baseline, fit_cv_m, singleton_rate,
+)
 from .competitors import _one_vs_rest, catboost_ts_encoding, fit_glmm, fit_npmle
 from .core import counts_from_labels, fixed_m_encoding, plugin_information, plugin_target_encoding, qhat_y
 from .crp import fit_crp_mixture
@@ -31,7 +33,7 @@ from .finite_mixture import fit_finite_mixture
 from .freq_prior import fit_freq_prior
 
 METHODS = ("baseline", "baseline_unseen", "baseline_robbins", "baseline_robbins_raw", "mixture", "crp",
-           "fixed_m", "plugin", "glmm", "npmle",
+           "fixed_m", "cv_m", "plugin", "glmm", "npmle", "npmle_robbins", "npmle_robbins_raw",
            "catboost_ts", "freq_prior")
 
 
@@ -82,6 +84,9 @@ def fit_counts(n: np.ndarray, method: str = "baseline", *, n_components: int = 2
         return EncodingFit(f.target_encoding, qy, f.I_hat, f)
     if method == "fixed_m":
         return EncodingFit(fixed_m_encoding(n, m=m, qy=qy), qy, float("nan"), None)
+    if method == "cv_m":
+        m_cv, enc = fit_cv_m(n, qy=qy)
+        return EncodingFit(enc, qy, float("nan"), m_cv)
     if method == "plugin":
         return EncodingFit(plugin_target_encoding(n), qy, plugin_information(n), None)
     if method == "glmm":
@@ -90,6 +95,11 @@ def fit_counts(n: np.ndarray, method: str = "baseline", *, n_components: int = 2
     if method == "npmle":
         f = fit_npmle(n)
         return EncodingFit(f.target_encoding, f.qy, f.I_hat, f)
+    if method in ("npmle_robbins", "npmle_robbins_raw"):
+        f = fit_npmle(n)
+        enc = _robbins_n01(n, f.target_encoding, f.qy, test=method == "npmle_robbins", alpha=alpha)
+        return EncodingFit(enc, enc[n.sum(axis=1) == 0][0] if (n.sum(axis=1) == 0).any()
+                           else singleton_rate(n, qy), f.I_hat, f)
     if method == "catboost_ts":
         return EncodingFit(catboost_ts_encoding(n), qy, float("nan"), None)
     if method == "freq_prior":
@@ -99,6 +109,34 @@ def fit_counts(n: np.ndarray, method: str = "baseline", *, n_components: int = 2
         enc, unseen, fits = _one_vs_rest(n, _freq_prior_binary)
         return EncodingFit(enc, unseen, float("nan"), fits)
     raise ValueError(f"unknown method {method!r}; expected one of {METHODS}")
+
+
+def _robbins_n01(n: np.ndarray, enc: np.ndarray, prior_mean: np.ndarray, test: bool = True,
+                 alpha: float = 0.05) -> np.ndarray:
+    """
+    Robbins correction for n <= 1 on top of any fitted encoder: unseen categories get the
+    singletons' label rate; categories seen once get the doubleton rates, shrunk toward the
+    encoder's own once-seen prediction, unless ``test`` and the doubletons' label pairs are
+    consistent with the encoder's prior (``doubleton_test_pairs`` at level ``alpha``).
+    """
+    nx = n.sum(axis=1)
+    ky = n.shape[1]
+    out = enc.copy()
+    out[nx == 0] = singleton_rate(n, qhat_y(n))
+    once = nx == 1
+    if not once.any():
+        return out
+    lab = n[once].argmax(axis=1)
+    # the encoder's prediction after one row of label c (rows of `prior`); prior mean for absent labels
+    prior = np.tile(prior_mean, (ky, 1)).astype(float)
+    for c in range(ky):
+        hit = lab == c
+        if hit.any():
+            prior[c] = enc[once][hit][0]
+    pair_probs = prior_mean[:, None] * prior
+    if not test or doubleton_test_pairs(n, pair_probs) < alpha:
+        out[once] = doubleton_rates(n, prior)[lab]
+    return out
 
 
 def _freq_prior_binary(k1, m):
@@ -170,7 +208,12 @@ class BayesianTargetEncoder(_EstimatorParams, TransformerMixin, BaseEstimator):
         (``doubleton_test``; "baseline_robbins_raw" skips the test);
         "mixture" a finite mixture with ``n_components`` betas; "crp" the
         self-tuning CRP mixture (slowest). "fixed_m" and "plugin" are the
-        classic smoothed and unsmoothed encoders, for comparison.
+        classic smoothed and unsmoothed encoders, for comparison; "cv_m" is
+        the smoothed encoder with ``m`` chosen by leave-one-out log-loss
+        (``fit_cv_m``). "npmle_robbins" is the NPMLE with the same Robbins
+        correction for categories seen at most once, gated by the doubletons
+        against the NPMLE's own pair probabilities ("npmle_robbins_raw" skips
+        the test).
         "glmm", "npmle" and "catboost_ts" are the competitors in
         :mod:`mitarget.competitors` (random-intercept GLMM, nonparametric
         prior, CatBoost's test-time target statistic). "freq_prior" lets the
