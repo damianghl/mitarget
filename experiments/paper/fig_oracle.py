@@ -94,9 +94,9 @@ def tab_oracle(summary, gap, paired, corr, out, nbar=2.0):
     s = summary[(summary.nbar == nbar) & (~summary.shuffled)]
     g = gap[(gap.nbar == nbar) & (~gap.shuffled)].set_index("feature")
     pr = paired[(paired.nbar == nbar) & (~paired.shuffled)].set_index(["feature", "method"])
-    cols = ["baseline", "baseline_unseen", "baseline_robbins", "freq_prior", "npmle", "fixed_m20", "beta_mm",
-            "oracle_blind"]
-    closed = ["baseline_unseen", "baseline_robbins", "freq_prior", "npmle"]
+    cols = ["baseline", "baseline_unseen", "baseline_robbins", "freq_prior", "npmle", "npmle_robbins",
+            "fixed_m20", "cv_m", "beta_mm", "oracle_blind"]
+    closed = ["baseline_unseen", "baseline_robbins", "freq_prior", "npmle", "npmle_robbins"]
     main, full = [], []
     for feat, title in POOLS:
         r = s[s.feature == feat].set_index("method")
@@ -116,14 +116,14 @@ def tab_oracle(summary, gap, paired, corr, out, nbar=2.0):
         # appendix: gap to the oracle of every method
         full.append(" & ".join([name] + gaps) + " \\\\")
     head = ("pool & corr & gain & baseline gap & gap at $n_x\\le1$"
-            " & closed: +unseen & +Robbins & freq.\\ prior & NPMLE \\\\")
-    head_full = ("pool & baseline & +unseen & +Robbins & freq.\\ prior & NPMLE"
-                 " & $m{=}20$ & matched beta & blind oracle \\\\")
+            " & closed: +unseen & +Robbins & freq.\\ prior & NPMLE & NPMLE +Robbins \\\\")
+    head_full = ("pool & baseline & +unseen & +Robbins & freq.\\ prior & NPMLE & NPMLE +Robbins"
+                 " & $m{=}20$ & CV $m$ & matched beta & blind oracle \\\\")
     with open(out, "w") as fh:
-        fh.write("\n".join(["\\begin{tabular}{l r r r r r r r r}", "\\toprule", head, "\\midrule",
+        fh.write("\n".join(["\\begin{tabular}{l " + "r " * 9 + "}", "\\toprule", head, "\\midrule",
                              *main, "\\bottomrule", "\\end{tabular}", ""]))
     with open(out.replace(".tex", "_gaps.tex"), "w") as fh:
-        fh.write("\n".join(["\\begin{tabular}{l r r r r r r r r}", "\\toprule", head_full, "\\midrule",
+        fh.write("\n".join(["\\begin{tabular}{l " + "r " * 10 + "}", "\\toprule", head_full, "\\midrule",
                              *full, "\\bottomrule", "\\end{tabular}", ""]))
 
 

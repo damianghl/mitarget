@@ -26,11 +26,12 @@ MAIN = [
     ("employee_salaries/position_title", "employee\\_salaries$^\\dagger$"),
 ]
 METHODS = [("Baseline + unseen correction", "+unseen"), ("Baseline + Robbins (n<=1)", "+Robbins"),
-           ("NPMLE", "NPMLE"),
+           ("NPMLE", "NPMLE"), ("NPMLE + Robbins (n<=1)", "NPMLE +Robbins"),
            ("Frequency prior", "freq.\\ prior"), ("GLMM", "GLMM"), ("Fixed m=20", "$m{=}20$"),
-           ("CatBoost TS (a=1)", "CatBoost TS")]
-# the main-text table leaves out CatBoost TS (it loses on every sparse feature); the appendix table keeps it
-METHODS_MAIN = METHODS[:-1]
+           ("CV m (LOO)", "CV $m$"), ("CatBoost TS (a=1)", "CatBoost TS")]
+# the main-text table leaves out CV m (it ties the baseline everywhere) and CatBoost TS (it loses on every
+# sparse feature); the appendix table keeps both
+METHODS_MAIN = METHODS[:-2]
 ALPHA = 0.01
 
 
