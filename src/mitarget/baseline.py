@@ -103,6 +103,17 @@ def doubleton_test(n: np.ndarray, beta: float, qy: np.ndarray) -> float:
     the oracle for categories seen once, differ from the pooled fit. The fitted
     parameters are treated as fixed, so the test is slightly conservative.
     """
+    qy = np.asarray(qy, dtype=float)
+    ky = len(qy)
+    return doubleton_test_pairs(n, qy[:, None] * (beta * qy[None, :] + np.eye(ky)) / (beta + 1))
+
+
+def doubleton_test_pairs(n: np.ndarray, pair_probs: np.ndarray) -> float:
+    """
+    As :func:`doubleton_test`, for any fitted prior: ``pair_probs[c, y]`` is the
+    fitted probability that a category seen twice has first label ``c`` and
+    second label ``y`` (marginal of ``c`` times the predictive after one ``c``).
+    """
     n = np.asarray(n, dtype=float)
     d = n[n.sum(axis=1) == 2]
     if len(d) == 0:
@@ -111,8 +122,53 @@ def doubleton_test(n: np.ndarray, beta: float, qy: np.ndarray) -> float:
     iu = np.triu_indices(ky)
     pairs = d.T @ d - np.diag(d.sum(axis=0))       # ordered pairs; diagonal counts each {c, c} twice
     obs = np.where(iu[0] == iu[1], pairs[iu] / 2, pairs[iu])
-    expd = qy[:, None] * (beta * qy[None, :] + np.eye(ky)) / (beta + 1)   # P(first c, second y)
-    expd = np.where(iu[0] == iu[1], expd[iu], 2 * expd[iu]) * len(d)
+    expd = np.asarray(pair_probs, dtype=float)
+    expd = np.where(iu[0] == iu[1], expd[iu], expd[iu] + expd.T[iu]) * len(d)
     pos = obs > 0
-    g = 2 * float((obs[pos] * np.log(obs[pos] / expd[pos])).sum())
+    g = 2 * float((obs[pos] * np.log(obs[pos] / np.maximum(expd[pos], 1e-300))).sum())
     return float(chi2.sf(g, df=len(obs) - 1))
+
+
+def loo_log_loss(n: np.ndarray, m: float, qy: np.ndarray | None = None) -> float:
+    """
+    Leave-one-out log-loss per row of the m-estimate ``(n_xc + m qy_c) / (n_x + m)``.
+
+    Each row is predicted from the other rows of its category, so a category
+    seen once is predicted by ``qy``, as an unseen category would be. Computed
+    in closed form from the counts; ``qy`` is not recomputed per row (an
+    ``O(1/N)`` effect).
+    """
+    n = np.asarray(n, dtype=float)
+    qy = qhat_y(n) if qy is None else np.asarray(qy, dtype=float)
+    nx = np.broadcast_to(n.sum(axis=1, keepdims=True), n.shape)
+    pos = n > 0
+    num = np.maximum(n[pos] - 1 + m * np.broadcast_to(qy[None, :], n.shape)[pos], 1e-300)
+    ll = n[pos] * (np.log(num) - np.log(nx[pos] - 1 + m))
+    return -float(ll.sum() / n.sum())
+
+
+#: pseudo-count grid for :func:`fit_cv_m`
+CV_M_GRID = np.logspace(-2, 4, 61)
+
+
+def fit_cv_m(n: np.ndarray, qy: np.ndarray | None = None,
+             grid: np.ndarray = CV_M_GRID) -> tuple[float, np.ndarray]:
+    """
+    Pseudo-count ``m`` of the m-estimate chosen by leave-one-out cross-validated
+    log-loss over ``grid`` (log-spaced, refined by a golden-section step around
+    the best grid point), and the encoding ``(n_xc + m qy_c) / (n_x + m)``.
+    """
+    from scipy.optimize import minimize_scalar
+
+    n = np.asarray(n, dtype=float)
+    qy = qhat_y(n) if qy is None else np.asarray(qy, dtype=float)
+    losses = np.array([loo_log_loss(n, m, qy) for m in grid])
+    i = int(np.argmin(losses))
+    lo, hi = np.log(grid[max(i - 1, 0)]), np.log(grid[min(i + 1, len(grid) - 1)])
+    m = float(grid[i])
+    if hi > lo:
+        res = minimize_scalar(lambda t: loo_log_loss(n, np.exp(t), qy), bounds=(lo, hi), method="bounded")
+        if res.fun < losses[i]:
+            m = float(np.exp(res.x))
+    nx = n.sum(axis=1, keepdims=True)
+    return m, (n + m * qy[None, :]) / (nx + m)

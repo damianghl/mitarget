@@ -39,6 +39,8 @@ def main(argv=None):
     a.out.mkdir(parents=True, exist_ok=True)
 
     d = pd.concat([pd.read_csv(f) for f in sorted(a.raw.glob("oracle_*.csv"))], ignore_index=True)
+    # runs with --suffix that add methods repeat the references on the same training sets: keep one copy
+    d = d.drop_duplicates(KEYS + ["rep", "method"], keep="first").reset_index(drop=True)
     bcols = [c for c in d.columns if c.startswith("eCE_n")]
     orc = d[d.method == "oracle"].set_index(KEYS + ["rep"])[["eCE"] + bcols].add_suffix("_orc")
     d = d.join(orc, on=KEYS + ["rep"])
@@ -89,7 +91,8 @@ def main(argv=None):
     by_n.to_csv(a.out / "baseline_gap_by_n.csv", index=False)
 
     pd.set_option("display.width", 250)
-    show = ["fixed_m20", "baseline", "baseline_unseen", "freq_prior", "npmle", "glmm", "beta_mm",
+    show = ["fixed_m20", "cv_m", "baseline", "baseline_unseen", "baseline_robbins", "freq_prior", "npmle",
+            "npmle_robbins", "glmm", "beta_mm",
             "oracle_blind"]
     piv = summ[summ.nbar == 2].pivot_table(index=["feature", "shuffled"], columns="method",
                                            values="share_of_gain_lost")

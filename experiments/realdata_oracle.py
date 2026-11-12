@@ -13,10 +13,12 @@ sets of ``N = nbar * L`` rows are drawn i.i.d., so the excess cross-entropy
 ``sum_j p_j KL(Bern(q_j) || Bern(r_j))`` is exact, with no test noise.
 
 Methods, all fit on the same training set (so every comparison is paired):
-marginal, fixed m = 20, the baseline, the baseline with the unseen correction,
+marginal, fixed m = 20, m chosen by leave-one-out cross-validated log-loss
+(``cv_m``), the baseline, the baseline with the unseen correction,
 the baseline with the Robbins correction for n <= 1 (``baseline_robbins``, with
 its doubleton test; ``baseline_robbins_raw`` without),
-the frequency prior (``freq_prior``: n + 1 shift, LR fallback), NPMLE, GLMM;
+the frequency prior (``freq_prior``: n + 1 shift, LR fallback), NPMLE,
+NPMLE with the same Robbins correction (``npmle_robbins``), GLMM;
 and three references that use the truth: the beta moment-matched to the q of
 a random row (``beta_mm``), the popularity-blind oracle (Bayes with the true
 law of q over the pool, ignoring ``n_x``) and the full oracle (Bayes with the
@@ -48,12 +50,14 @@ EPS = 1e-12
 #: name -> function of the (L, 2) training count matrix returning P(y = 1 | level)
 FITTED = {
     "fixed_m20": lambda n: fit_counts(n, "fixed_m", m=20.0).encoding[:, 1],
+    "cv_m": lambda n: fit_counts(n, "cv_m").encoding[:, 1],
     "baseline": lambda n: fit_counts(n, "baseline").encoding[:, 1],
     "baseline_unseen": lambda n: fit_counts(n, "baseline_unseen").encoding[:, 1],
     "baseline_robbins": lambda n: fit_counts(n, "baseline_robbins").encoding[:, 1],
     "baseline_robbins_raw": lambda n: fit_counts(n, "baseline_robbins_raw").encoding[:, 1],
     "freq_prior": lambda n: fit_counts(n, "freq_prior").encoding[:, 1],
     "npmle": lambda n: fit_counts(n, "npmle").encoding[:, 1],
+    "npmle_robbins": lambda n: fit_counts(n, "npmle_robbins").encoding[:, 1],
     "glmm": lambda n: fit_counts(n, "glmm").encoding[:, 1],
 }
 
