@@ -82,7 +82,30 @@ def test_ordered_target_statistics_matches_brute_force():
         assert np.allclose(out[i], expected)
 
 
-@pytest.mark.parametrize("method", ["glmm", "npmle", "catboost_ts"])
+def test_glmm_posterior_mean_matches_quadrature_and_prior_mean():
+    rng = np.random.default_rng(3)
+    u = rng.normal(0, 1.6, 6000)
+    m = rng.poisson(1.0, 6000)
+    k1 = rng.binomial(m, expit(-1.5 + u))
+    n = _binary_counts(k1, m)
+    mode, mean = fit_glmm(n), fit_glmm(n, predict="mean")
+    assert np.isclose(mode.intercept, mean.intercept) and np.isclose(mode.sigma, mean.sigma)
+    b0, s = mean.intercept, mean.sigma
+    z, w = np.polynomial.hermite_e.hermegauss(80)
+    w = w / w.sum()
+    # unseen levels: the prior mean of q, not expit(b0) (its median)
+    assert np.isclose(mean.qy[1], (w * expit(b0 + s * z)).sum(), atol=1e-6)
+    assert np.isclose(mode.qy[1], expit(b0))
+    # a level with 1 of 2: posterior mean by Gauss-Hermite on the prior
+    i = np.flatnonzero((m == 2) & (k1 == 1))[0]
+    lik = expit(b0 + s * z) * (1 - expit(b0 + s * z))
+    expected = (w * lik * expit(b0 + s * z)).sum() / (w * lik).sum()
+    assert np.isclose(mean.target_encoding[i, 1], expected, atol=1e-6)
+    with pytest.raises(ValueError):
+        fit_glmm(n, predict="median")
+
+
+@pytest.mark.parametrize("method", ["glmm", "glmm_mean", "npmle", "catboost_ts"])
 def test_encoder_accepts_competitor_methods(method):
     rng = np.random.default_rng(5)
     x = rng.integers(0, 30, 300).astype(str)

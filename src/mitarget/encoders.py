@@ -33,7 +33,7 @@ from .finite_mixture import fit_finite_mixture
 from .freq_prior import fit_freq_prior
 
 METHODS = ("baseline", "baseline_unseen", "baseline_robbins", "baseline_robbins_raw", "mixture", "crp",
-           "fixed_m", "cv_m", "plugin", "glmm", "npmle", "npmle_robbins", "npmle_robbins_raw",
+           "fixed_m", "cv_m", "plugin", "glmm", "glmm_mean", "npmle", "npmle_robbins", "npmle_robbins_raw",
            "catboost_ts", "freq_prior")
 
 
@@ -89,8 +89,8 @@ def fit_counts(n: np.ndarray, method: str = "baseline", *, n_components: int = 2
         return EncodingFit(enc, qy, float("nan"), m_cv)
     if method == "plugin":
         return EncodingFit(plugin_target_encoding(n), qy, plugin_information(n), None)
-    if method == "glmm":
-        f = fit_glmm(n)
+    if method in ("glmm", "glmm_mean"):
+        f = fit_glmm(n, predict="mean" if method == "glmm_mean" else "mode")
         return EncodingFit(f.target_encoding, f.qy, float("nan"), f)
     if method == "npmle":
         f = fit_npmle(n)
@@ -215,8 +215,10 @@ class BayesianTargetEncoder(_EstimatorParams, TransformerMixin, BaseEstimator):
         against the NPMLE's own pair probabilities ("npmle_robbins_raw" skips
         the test).
         "glmm", "npmle" and "catboost_ts" are the competitors in
-        :mod:`mitarget.competitors` (random-intercept GLMM, nonparametric
-        prior, CatBoost's test-time target statistic). "freq_prior" lets the
+        :mod:`mitarget.competitors`: a random-intercept GLMM encoded at the
+        conditional mode, a nonparametric prior and CatBoost's test-time
+        target statistic; "glmm_mean" is the same GLMM fit encoded by the
+        posterior mean. "freq_prior" lets the
         prior mean depend on the category's count (:mod:`mitarget.freq_prior`;
         binary targets only), and unseen categories get its prediction at
         count 0 instead of the marginal. It is a binary model, fit

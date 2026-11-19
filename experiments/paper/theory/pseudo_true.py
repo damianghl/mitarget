@@ -14,7 +14,10 @@ def Rorc(at,w,n):
         D=M(at,w,k,n-k); p=M(at,w,k+1,n-k)/D
         tot+=comb(n,k)*(w*at**k*(1-at)**(n-k)*kl(at,p)).sum()
     return tot
-for at,w in [(np.array([.1,.5,.9]),np.array([.25,.5,.25])),(np.array([.1,.5,.9]),np.array([.4,.2,.4])),(np.array([.05,.95]),np.array([.5,.5]))]:
+PRIORS=[(np.array([.1,.5,.9]),np.array([.25,.5,.25])),(np.array([.1,.5,.9]),np.array([.4,.2,.4])),(np.array([.05,.95]),np.array([.5,.5])),
+        (np.array([.2,.3,.85]),np.array([.3,.4,.3])),(np.array([.1,.9]),np.array([.8,.2]))]
+# gap_EB_n01: the part of the pseudo-true fit's gap on levels seen at most once (zero for the moment-matched beta)
+for at,w in PRIORS:
     mu=M(at,w,1,0); v=M(at,w,2,0)-mu**2; smm=mu*(1-mu)/v-1
     print(at,w,"s_mm=%.3f"%smm)
     for nb in [0.5,1,2,5,10]:
@@ -24,4 +27,5 @@ for at,w in [(np.array([.1,.5,.9]),np.array([.25,.5,.25])),(np.array([.1,.5,.9])
         spt=np.exp(minimize_scalar(nll,bounds=(-6,8),method='bounded').x)
         g_mm=sum(wn[n]*Delta(at,w,n,mu,smm) for n in range(60)); g_pt=sum(wn[n]*Delta(at,w,n,mu,spt) for n in range(60))
         ro=sum(wn[n]*Rorc(at,w,n) for n in range(60))
-        print("  nbar=%4.1f s_pseudo=%.3f oracle=%.4f gap_mm=%.5f gap_EB=%.5f"%(nb,spt,ro,g_mm,g_pt))
+        g01=sum(wn[n]*Delta(at,w,n,mu,spt) for n in range(2))
+        print("  nbar=%4.1f s_pseudo=%.3f oracle=%.4f gap_mm=%.5f gap_EB=%.5f gap_EB_n01=%.6f"%(nb,spt,ro,g_mm,g_pt,g01))

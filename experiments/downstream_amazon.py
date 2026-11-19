@@ -53,8 +53,13 @@ ENCODERS = {
     "npmle": dict(method="npmle"),
     "freq_prior": dict(method="freq_prior"),
     "glmm": dict(method="glmm"),
+    "glmm_mean": dict(method="glmm_mean"),
     "fixed_m20": dict(method="fixed_m", m=20.0),
     "catboost_ts": dict(method="catboost_ts"),
+    # the encoder plus a count feature log(1 + n_x) per column, n_x counted on the outer train part
+    # (label-free, so no leakage): the usual practitioner's answer to popularity dependence
+    "baseline_count": dict(method="baseline"),
+    "npmle_count": dict(method="npmle"),
 }
 RAW_COLUMNS = ["RESOURCE", "MGR_ID", "ROLE_ROLLUP_1", "ROLE_ROLLUP_2", "ROLE_DEPTNAME", "ROLE_TITLE",
                "ROLE_FAMILY_DESC", "ROLE_FAMILY"]
@@ -90,9 +95,20 @@ def score(y, p) -> dict:
     return {"log_loss": log_loss(y, p, labels=[0, 1]), "auc": roc_auc_score(y, p)}
 
 
+def count_features(Xtr: pd.DataFrame, Xte: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """log(1 + n_x) for every column, with n_x the level's count in ``Xtr`` (0 for unseen levels)."""
+    ftr, fte = [], []
+    for c in Xtr.columns:
+        counts = Xtr[c].value_counts()
+        ftr.append(np.log1p(Xtr[c].map(counts).to_numpy(float)))
+        fte.append(np.log1p(Xte[c].map(counts).fillna(0).to_numpy(float)))
+    return np.column_stack(ftr), np.column_stack(fte)
+
+
 def run_fold(X, y, tr, te, encoders, inner_cv, seed, models):
     rows = []
     Xtr, Xte, ytr, yte = X.iloc[tr], X.iloc[te], y[tr], y[te]
+    ctr, cte = (count_features(Xtr, Xte) if any(n.endswith("_count") for n in encoders) else (None, None))
     for name, params in encoders.items():
         t0 = time.time()
         enc = BayesianTargetEncoder(cv=inner_cv, random_state=seed, **params)
@@ -100,9 +116,12 @@ def run_fold(X, y, tr, te, encoders, inner_cv, seed, models):
         fte = enc.transform(Xte)            # fit on the whole outer train part
         t_enc = time.time() - t0
         for mname, make in models.items():
-            scaler = StandardScaler().fit(features(ftr, mname))
-            model = make().fit(scaler.transform(features(ftr, mname)), ytr)
-            p = model.predict_proba(scaler.transform(features(fte, mname)))[:, 1]
+            gtr, gte = features(ftr, mname), features(fte, mname)
+            if name.endswith("_count"):
+                gtr, gte = np.column_stack([gtr, ctr]), np.column_stack([gte, cte])
+            scaler = StandardScaler().fit(gtr)
+            model = make().fit(scaler.transform(gtr), ytr)
+            p = model.predict_proba(scaler.transform(gte))[:, 1]
             rows.append({"encoder": name, "model": mname, "enc_seconds": t_enc, **score(yte, p)})
     return rows
 
