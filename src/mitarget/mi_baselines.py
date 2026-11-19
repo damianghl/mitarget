@@ -62,15 +62,17 @@ def entropy_nsb(c, k: int, n_grid: int = 400) -> float:
     N, K_obs = c.sum(), len(c)
     if k < K_obs:
         raise ValueError("k must be at least the number of observed symbols")
+    # symbols with the same count contribute identical terms: sum over distinct counts
+    cu, mult = np.unique(c, return_counts=True)
     b = np.logspace(-6, 4, n_grid)
     A = k * b
+    cb = cu[None, :] + b[:, None]
     # log evidence p(counts | b) up to a constant; zero-count symbols contribute nothing
-    log_ev = (gammaln(A) - gammaln(N + A)
-              + (gammaln(c[None, :] + b[:, None]) - gammaln(b[:, None])).sum(axis=1))
+    log_ev = gammaln(A) - gammaln(N + A) + ((gammaln(cb) - gammaln(b[:, None])) * mult).sum(axis=1)
     # NSB prior on b: derivative of the prior mean entropy, k psi1(k b + 1) - psi1(b + 1)
     prior = k * polygamma(1, A + 1) - polygamma(1, b + 1)
     # posterior mean entropy given b
-    s = ((c[None, :] + b[:, None]) * digamma(c[None, :] + b[:, None] + 1)).sum(axis=1)
+    s = (cb * digamma(cb + 1) * mult).sum(axis=1)
     s += (k - K_obs) * b * digamma(b + 1)
     eh = digamma(N + A + 1) - s / (N + A)
     lw = log_ev + np.log(np.maximum(prior, 1e-300)) + np.log(b)  # integrate in log b
