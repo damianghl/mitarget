@@ -5,8 +5,11 @@ matrix interface as the rest of the package.
 - :func:`fit_glmm`: random-intercept logistic GLMM, ``logit q_x = b0 + u_x``
   with ``u_x ~ N(0, sigma^2)``, fit by marginal likelihood (adaptive
   Gauss-Hermite quadrature, or lme4's default Laplace approximation); the
-  encoding is ``expit(b0 + u_x)`` at the conditional modes. This is the
-  encoder Pargent et al. (2022) found best overall.
+  encoding is ``expit(b0 + u_x)`` at the conditional modes and ``expit(b0)``
+  (the prior median) for unseen levels, as lme4's ``predict`` gives. This is
+  the encoder Pargent et al. (2022) found best overall. ``predict="mean"``
+  uses the posterior mean ``E[expit(b0 + u_x) | data]`` instead, and the
+  prior mean for unseen levels.
 - :func:`fit_npmle`: Kiefer-Wolfowitz nonparametric maximum-likelihood prior
   for ``q_x`` on a grid (binomial mixture, fit by EM); the encoding is the
   posterior mean. It estimates the whole prior instead of a beta's two moments.
@@ -114,7 +117,15 @@ def _glmm_loglik(b0, sigma, k1, m, mult, n_agq):
     return float(np.sum(mult * ll))
 
 
-def _fit_glmm_binary(k1: np.ndarray, m: np.ndarray, n_agq: int = 1):
+def _posterior_mean_rates(b0, sigma, k1, m):
+    """``E[expit(b0 + sigma z) | k1 of m]`` under ``z ~ N(0, 1)``, on the dense grid ``_Z_GRID``."""
+    eta = b0 + sigma * _Z_GRID[None, :]
+    lw = k1[:, None] * eta - m[:, None] * np.logaddexp(0, eta) - _Z_GRID[None, :] ** 2 / 2
+    w = np.exp(lw - lw.max(axis=1, keepdims=True))
+    return (w * expit(eta)).sum(axis=1) / w.sum(axis=1)
+
+
+def _fit_glmm_binary(k1: np.ndarray, m: np.ndarray, n_agq: int = 1, predict: str = "mode"):
     seen, gk1, gm, mult, inverse = _binary_groups(k1, m)
     rate = np.clip(k1.sum() / m.sum(), 1e-6, 1 - 1e-6)
 
@@ -124,24 +135,34 @@ def _fit_glmm_binary(k1: np.ndarray, m: np.ndarray, n_agq: int = 1):
     res = minimize(objective, x0=[float(logit(rate)), 0.0], method="L-BFGS-B",
                    bounds=[(-30, 30), LOG_SIGMA_BOUNDS])
     b0, sigma = float(res.x[0]), float(np.exp(res.x[1]))
+    if predict == "mean":
+        unseen = float(_posterior_mean_rates(b0, sigma, np.zeros(1), np.zeros(1))[0])
+        p = np.full(len(k1), unseen)
+        p[seen] = _posterior_mean_rates(b0, sigma, gk1, gm)[inverse]
+        return p, unseen, (b0, sigma)
+    if predict != "mode":
+        raise ValueError(f"predict must be 'mode' or 'mean', got {predict!r}")
     u, _ = _conditional_modes(b0, sigma, gk1, gm)
     p = np.full(len(k1), expit(b0))
     p[seen] = expit(b0 + u[inverse])
     return p, float(expit(b0)), (b0, sigma)
 
 
-def fit_glmm(n: np.ndarray, n_agq: int = 15) -> GLMMFit:
+def fit_glmm(n: np.ndarray, n_agq: int = 15, predict: str = "mode") -> GLMMFit:
     """
     Random-intercept logistic GLMM on a ``(kx, ky)`` count matrix (one-vs-rest
     for ``ky > 2``). The marginal likelihood is integrated numerically (see
     :func:`_glmm_loglik`); ``n_agq=1`` is lme4's default Laplace
     approximation instead, which with mostly single-observation levels can
-    pick a spuriously large ``sigma``.
+    pick a spuriously large ``sigma``. ``predict="mode"`` encodes at the
+    conditional modes (lme4's plug-in, ``expit(b0)`` for unseen levels);
+    ``predict="mean"`` encodes by the posterior mean of ``q_x`` (prior mean
+    for unseen levels), the Bayes rule under log-loss.
     """
     n = np.asarray(n, dtype=float)
 
     def fit_binary(k1, m):
-        return _fit_glmm_binary(k1, m, n_agq=n_agq)
+        return _fit_glmm_binary(k1, m, n_agq=n_agq, predict=predict)
 
     if n.shape[1] == 2:
         p1, unseen, (b0, sigma) = fit_binary(n[:, 1], n.sum(axis=1))

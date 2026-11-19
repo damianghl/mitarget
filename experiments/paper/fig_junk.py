@@ -42,7 +42,7 @@ def main():
                     ax.text(j, i, txt, ha="center", va="center", fontsize=6.5,
                             color="white" if min(v, 1) > 0.5 else "#1a1a19")
         ax.set_xticks(range(len(Ns)), [f"{N / a.kx:g}" for N in Ns])
-        ax.set_xlabel(r"$\bar n = N/k_x$")
+        ax.set_xlabel(r"$\bar n = N/|\mathcal{X}|$")
         ax.set_title(title + " (% of gain lost)")
         ax.grid(False)
     axes[0].set_yticks(range(len(fs)), [f"{f:g}" for f in fs])

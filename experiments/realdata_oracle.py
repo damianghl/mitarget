@@ -25,6 +25,17 @@ law of q over the pool, ignoring ``n_x``) and the full oracle (Bayes with the
 true joint law of ``(p_j, q_j)``: posterior over pool levels proportional to
 ``p_j Poi(n; N p_j) q_j^k (1 - q_j)^(n - k)``).
 
+``--tail shifted-head`` keeps every level of the feature instead (the click
+features' popularity dependence sits on levels with one to five rows, which
+the ``--min-rows`` pool drops). Levels with at least ``--min-rows`` rows keep
+their observed rate. A level with fewer rows gets a known ``q_j`` drawn from
+the head's law of ``q`` (levels weighted equally), shifted on the logit scale
+so that its mean equals the observed mean rate of the levels in the same size
+bucket (1, 2, 3-5, 6-10, 11-20, 21-50, 51 to min-rows - 1). The tail's shape
+is not identified from the data (Section 6), so this is one model of it; what
+it keeps is the observed size histogram and the observed step of the label
+rate with size.
+
 ``--shuffle`` permutes ``q_j`` across levels (control without popularity
 dependence). One output row per (nbar, rep, method) with the eCE, its split by
 the training count of the test row's level, and the (F1 + 2 F2) / N diagnostic
@@ -39,7 +50,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.special import logsumexp
+from scipy.optimize import brentq
+from scipy.special import expit, logsumexp
 
 from mitarget.encoders import fit_counts
 
@@ -59,6 +71,7 @@ FITTED = {
     "npmle": lambda n: fit_counts(n, "npmle").encoding[:, 1],
     "npmle_robbins": lambda n: fit_counts(n, "npmle_robbins").encoding[:, 1],
     "glmm": lambda n: fit_counts(n, "glmm").encoding[:, 1],
+    "glmm_mean": lambda n: fit_counts(n, "glmm_mean").encoding[:, 1],
 }
 
 
@@ -68,12 +81,31 @@ def kl_bern(q, r):
     return q * np.log(q / r) + (1 - q) * np.log((1 - q) / (1 - r))
 
 
-def load_population(path, feature, min_rows):
+TAIL_BUCKETS = (1, 2, 3, 6, 11, 21, 51)
+
+
+def load_population(path, feature, min_rows, tail=None, seed=0):
     d = pd.read_csv(path, sep="\t", usecols=[feature, "rating"])
     g = d.assign(y=(d.rating >= 4).astype(float)).groupby(feature).y.agg(["size", "mean"])
-    g = g[g["size"] >= min_rows]
+    if tail is None:
+        g = g[g["size"] >= min_rows]
+        M = g["size"].to_numpy(float)
+        return M / M.sum(), g["mean"].to_numpy(), int(M.sum())
     M = g["size"].to_numpy(float)
-    return M / M.sum(), g["mean"].to_numpy(), int(M.sum())
+    q = g["mean"].to_numpy().copy()
+    head = M >= min_rows
+    qh = np.clip(q[head], 0.5 / M[head], 1 - 0.5 / M[head])
+    lh = np.log(qh / (1 - qh))
+    rng = np.random.default_rng(seed)
+    edges = [b for b in TAIL_BUCKETS if b < min_rows] + [min_rows]
+    for lo, hi in zip(edges[:-1], edges[1:], strict=True):
+        m = (M >= lo) & (M < hi)
+        if not m.any():
+            continue
+        target = q[m].mean()
+        c = brentq(lambda c, t=target: expit(lh + c).mean() - t, -20, 20)
+        q[m] = expit(lh[rng.integers(len(lh), size=m.sum())] + c)
+    return M / M.sum(), q, int(M.sum())
 
 
 def bayes_predict(n1, n0, q, log_prior):
@@ -102,11 +134,18 @@ def run_cell(p, q, N, rng, fitted=FITTED):
     mu = (p * q).sum()
     s_mm = mu * (1 - mu) / (p * (q - mu) ** 2).sum() - 1
     preds["beta_mm"] = (n1 + mu * s_mm) / (nx + s_mm)
-    preds["oracle_blind"] = bayes_predict(n1, n0, q, np.log(p)[None, :])
-    lam = N * p
+    # Both oracles are posteriors over the pool's levels; levels sharing (p_j, q_j) are one atom.
     pairs, inv = np.unique(np.column_stack([n1, n0]), axis=0, return_inverse=True)
-    lp = np.log(p)[None, :] + pairs.sum(1)[:, None] * np.log(lam)[None, :] - lam[None, :]
-    preds["oracle"] = bayes_predict(pairs[:, 0], pairs[:, 1], q, lp)[inv.ravel()]
+    inv = inv.ravel()
+    atoms, mult = np.unique(np.column_stack([p, q]), axis=0, return_counts=True)
+    pa, qa, lm = atoms[:, 0], atoms[:, 1], np.log(mult)
+    # popularity-blind: law of q over levels, weighted by p as in the paper's definition
+    blind_w = pd.Series(pa * mult).groupby(qa).sum()
+    qb, lb = blind_w.index.to_numpy(), np.log(blind_w.to_numpy())
+    preds["oracle_blind"] = bayes_predict(pairs[:, 0], pairs[:, 1], qb, lb[None, :])[inv]
+    lam = N * pa
+    lp = (np.log(pa) + lm)[None, :] + pairs.sum(1)[:, None] * np.log(lam)[None, :] - lam[None, :]
+    preds["oracle"] = bayes_predict(pairs[:, 0], pairs[:, 1], qa, lp)[inv]
 
     F1, F2 = int((nx == 1).sum()), int((nx == 2).sum())
     common = dict(N=N, GT_w01=(F1 + 2 * F2) / N, true_w01=float(p[nx <= 1].sum()))
@@ -134,12 +173,14 @@ def main(argv=None):
     ap.add_argument("--methods", nargs="*", default=list(FITTED), choices=list(FITTED),
                     help="fitted methods to run (training sets do not depend on this choice)")
     ap.add_argument("--suffix", default="", help="appended to the output file name")
+    ap.add_argument("--tail", choices=["shifted-head"], default=None,
+                    help="keep all levels; levels below --min-rows get a modelled q (see the docstring)")
     ap.add_argument("--out", type=Path, required=True, help="output folder")
     a = ap.parse_args(argv)
     fitted = {m: FITTED[m] for m in a.methods}
 
     name = a.name or a.feature
-    p, q, M = load_population(a.data, a.feature, a.min_rows)
+    p, q, M = load_population(a.data, a.feature, a.min_rows, tail=a.tail, seed=a.seed + 2)
     corr = float(np.corrcoef(np.log(p), q)[0, 1])
     if a.shuffle:
         q = np.random.default_rng(a.seed + 1).permutation(q)

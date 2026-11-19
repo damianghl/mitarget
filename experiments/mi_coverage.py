@@ -35,6 +35,8 @@ row-weighted moments ``sum_j p_j q_j^l``: the width no amount of data on levels 
 ``--lik-only`` redraws the same training sets (same seeds) and computes only the likelihood
 interval, to add it to an existing run; it writes ``lik_coverage_*.csv`` next to the
 ``mi_coverage_*.csv`` files, and ``mi_coverage_tables.py`` merges them by data set.
+``--baselines-only`` does the same for the classical estimators of ``mitarget.mi_baselines``
+(Miller-Madow, Chao-Shen, NSB with the true number of levels) and writes ``base_coverage_*.csv``.
 """
 
 from __future__ import annotations
@@ -48,6 +50,7 @@ import numpy as np
 import pandas as pd
 
 from mitarget import credible_interval, fit_counts, identified_interval, mi_interval, plugin_information
+from mitarget.mi_baselines import mi_chao_shen, mi_miller_madow, mi_nsb
 from mitarget.mi_interval import binary_entropy
 
 NBAR_SYNTH = (0.5, 1, 2, 5)
@@ -92,6 +95,7 @@ def likelihood_columns(n):
 
 
 def evaluate(p, q, N, rng, slack, max_L, lik_only=False):
+    """``lik_only``: False (everything), True (likelihood interval only) or "baselines"."""
     """Draw one training set of N rows from the population (p, q) and fit everything."""
     K = len(p)
     level = rng.choice(K, size=N, p=p)
@@ -106,6 +110,9 @@ def evaluate(p, q, N, rng, slack, max_L, lik_only=False):
     row = dict(N=N, I_true=I_true, I_count=I_count, F1=int((nx == 1).sum()), F2=int((nx == 2).sum()),
                K2=int((nx >= 2).sum()), K3=int((nx >= 3).sum()), K4=int((nx >= 4).sum()),
                nmax=int(nx.max()))
+    if lik_only == "baselines":
+        row.update(I_mm=mi_miller_madow(n), I_cs=mi_chao_shen(n), I_nsb=mi_nsb(n, K))
+        return row
     row.update(likelihood_columns(n))
     if lik_only:
         return row
@@ -176,10 +183,14 @@ def main(argv=None):
     ap.add_argument("--jobs", type=int, default=1)
     ap.add_argument("--lik-only", action="store_true",
                     help="only the likelihood interval, on the same data sets (lik_coverage_*.csv)")
+    ap.add_argument("--baselines-only", action="store_true",
+                    help="redraw the same data sets and compute only the classical MI estimators")
     ap.add_argument("--tag", default=None, help="synthetic: suffix of the output file (default: none)")
     ap.add_argument("--out", type=Path, required=True, help="output folder")
     a = ap.parse_args(argv)
     a.out.mkdir(parents=True, exist_ok=True)
+    if a.baselines_only:
+        a.lik_only = "baselines"
 
     if a.mode == "synthetic":
         nbars = a.nbar or NBAR_SYNTH
@@ -199,7 +210,8 @@ def main(argv=None):
         path = a.out / f"mi_coverage_{name}_{'shuffled' if a.shuffle else 'real'}.csv"
         print(f"{name}{' (shuffled)' if a.shuffle else ''}: K={len(p)} levels", flush=True)
     if a.lik_only:
-        path = path.with_name(path.name.replace("mi_coverage_", "lik_coverage_"))
+        prefix = "base_coverage_" if a.lik_only == "baselines" else "lik_coverage_"
+        path = path.with_name(path.name.replace("mi_coverage_", prefix))
 
     t0, rows = time.time(), []
     with ProcessPoolExecutor(a.jobs) as ex:

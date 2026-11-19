@@ -56,7 +56,7 @@ SHORT = {
 }
 METHOD_ORDER = ["Prior only", "Fixed m=20", "CV m (LOO)", BASELINE, "Baseline + unseen correction",
                 ROBBINS, "Baseline + Robbins (n<=1) raw", "Frequency prior",
-                "GLMM", "NPMLE", "NPMLE + Robbins (n<=1)", "CatBoost TS (a=1)",
+                "GLMM", "GLMM (posterior mean)", "NPMLE", "NPMLE + Robbins (n<=1)", "CatBoost TS (a=1)",
                 "sklearn TargetEncoder (auto)"]
 
 

@@ -55,6 +55,7 @@ METHODS = {
     ROBBINS + " raw": lambda n, x, y: fit_counts(n, "baseline_robbins_raw").encoding,
     "Frequency prior": lambda n, x, y: fit_counts(n, "freq_prior").encoding,
     "GLMM": lambda n, x, y: fit_counts(n, "glmm").encoding,
+    "GLMM (posterior mean)": lambda n, x, y: fit_counts(n, "glmm_mean").encoding,
     "NPMLE": lambda n, x, y: fit_counts(n, "npmle").encoding,
     "NPMLE + Robbins (n<=1)": lambda n, x, y: fit_counts(n, "npmle_robbins").encoding,
     "CatBoost TS (a=1)": lambda n, x, y: fit_counts(n, "catboost_ts").encoding,
