@@ -3,7 +3,7 @@ Appendix table: what can be said about I(X;Y) on the full real features without 
 
 Reads the CSV of ``experiments/mi_realdata_bounds.py`` and writes ``tab_mi_bounds.tex``: per binary task, the
 singletons' row share, the predictive lower bound (best held-out encoder), the stratified identified interval
-at the plug-in moments, the assumption-light interval that combines them, the singletons' part of its width,
+at the plug-in moments, the interval that combines them, the singletons' part of its width,
 the baseline and NPMLE estimates, and the likelihood interval under exchangeability where it was computed.
 
     python tab_mi_bounds.py bounds.csv
@@ -27,7 +27,7 @@ def main():
     a = ap.parse_args()
     d = pd.read_csv(a.bounds).sort_values("task")
     lines = [r"\begin{tabular}{l r r r r r r r r}", r"\toprule",
-             r"feature & $F_1/N$ & pred.\ bound & stratified & assumption-light & singletons"
+             r"feature & $F_1/N$ & pred.\ bound & stratified & combined & singletons"
              r" & baseline & NPMLE"
              r" & lik.\ (exch.)\\", r"\midrule"]
     for _, r in d.iterrows():

@@ -1,5 +1,5 @@
 """
-Appendix table: implementation checks of the likelihood interval (M3 of the second simulated review).
+Appendix table: implementation checks of the likelihood interval.
 
 Reads the ``lik_coverage_*.csv`` files that ``experiments/mi_coverage.py --lik-only`` writes with the
 tags below and writes ``tab_mi_sens.tex``:

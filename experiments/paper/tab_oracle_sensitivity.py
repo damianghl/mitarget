@@ -1,5 +1,5 @@
 """
-Appendix table: sensitivity of the real-data oracle to how the population is built (K4 of the review).
+Appendix table: sensitivity of the real-data oracle to how the population is built.
 
 Reads the CSV of ``experiments/oracle_sensitivity.py`` (designs ``head100``, ``head50`` and ``tail``) and
 writes ``tab_oracle_sensitivity.tex``: for every real pool at nbar = 2, the number of levels, corr(log p, q),

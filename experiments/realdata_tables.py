@@ -56,8 +56,11 @@ SHORT = {
 }
 METHOD_ORDER = ["Prior only", "Fixed m=20", "CV m (LOO)", BASELINE, "Baseline + unseen correction",
                 ROBBINS, "Baseline + Robbins (n<=1) raw", "Frequency prior",
-                "GLMM", "GLMM (posterior mean)", "NPMLE", "NPMLE + Robbins (n<=1)", "CatBoost TS (a=1)",
-                "sklearn TargetEncoder (auto)"]
+                "GLMM", "GLMM (posterior mean)", "NPMLE", "NPMLE + Robbins (n<=1)", "CatBoost TS (a=1)"]
+#: methods in the raw files that the tables leave out. scikit-learn's TargetEncoder is fitted with
+#: internal cross-fitting and its singleton encodings sit near 0 or 1, so its held-out log-loss is
+#: set by the 1e-12 clip rather than by the encoder; it is not a fair single-feature competitor.
+EXCLUDED = ("sklearn TargetEncoder (auto)",)
 
 
 #: columns that identify a row of each raw file, for merging several runs
@@ -193,6 +196,11 @@ def main(argv=None):
     for df in (folds, rows, bins, meta):
         if not df.empty:
             df["task"] = df.task.replace(SHORT)
+    folds = folds[~folds.method.isin(EXCLUDED)]
+    if not rows.empty:
+        rows = rows[~rows.method_a.isin(EXCLUDED) & ~rows.method_b.isin(EXCLUDED)]
+    if not bins.empty:
+        bins = bins[~bins.method.isin(EXCLUDED)]
     ll = logloss_table(folds)
     ll["method"] = pd.Categorical(ll.method, [m for m in METHOD_ORDER if m in set(ll.method)])
     ll = ll.sort_values(["task", "method"], kind="stable")

@@ -1,6 +1,6 @@
 """
 Fixed-smoothing sweep: how much does the m-estimate lose as its pseudo-count m moves away from the
-marginal-likelihood value s-hat? (K6 of the second simulated review.)
+marginal-likelihood value s-hat?
 
 The m-estimate ``(k_x + m mu) / (n_x + m)`` with ``m = s-hat`` is the baseline, so every encoder here
 differs from the baseline only by its m. Two designs:

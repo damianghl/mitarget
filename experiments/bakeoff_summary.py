@@ -35,7 +35,7 @@ from realdata_tables import BASELINE, SHORT, _read, holm, logloss_table, nb_test
 #: methods compared in the win/tie/loss table (all fitted encoders of the paper)
 FITTED = ["Fixed m=20", "CV m (LOO)", BASELINE, "Baseline + unseen correction", "Baseline + Robbins (n<=1)",
           "Frequency prior", "NPMLE", "NPMLE + Robbins (n<=1)", "GLMM", "GLMM (posterior mean)",
-          "CatBoost TS (a=1)", "sklearn TargetEncoder (auto)"]
+          "CatBoost TS (a=1)"]   # scikit-learn's encoder is left out (realdata_tables.EXCLUDED)
 
 
 def main(argv=None):
