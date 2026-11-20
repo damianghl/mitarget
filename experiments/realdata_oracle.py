@@ -108,12 +108,22 @@ def load_population(path, feature, min_rows, tail=None, seed=0):
     return M / M.sum(), q, int(M.sum())
 
 
-def bayes_predict(n1, n0, q, log_prior):
-    """Posterior mean of q given counts, with atoms at the pool's q and log prior weights (rows, atoms)."""
+def bayes_predict(n1, n0, q, log_prior, max_cells=20_000_000):
+    """
+    Posterior mean of q given counts, with atoms at the pool's q and log prior weights: an array of shape
+    (rows, atoms) or a callable returning the rows ``i`` of it. Rows are processed in chunks of at most
+    ``max_cells`` matrix cells, so memory stays bounded when there are many atoms.
+    """
     lq, l1q = np.log(np.clip(q, EPS, 1)), np.log(np.clip(1 - q, EPS, 1))
-    ll = log_prior + n1[:, None] * lq[None, :] + n0[:, None] * l1q[None, :]
-    post = np.exp(ll - logsumexp(ll, axis=1, keepdims=True))
-    return post @ q
+    prior = log_prior if callable(log_prior) else (
+        lambda i: log_prior if log_prior.shape[0] == 1 else log_prior[i])
+    out = np.empty(len(n1))
+    step = max(1, max_cells // len(q))
+    for a in range(0, len(n1), step):
+        i = slice(a, a + step)
+        ll = prior(i) + n1[i, None] * lq[None, :] + n0[i, None] * l1q[None, :]
+        out[i] = np.exp(ll - logsumexp(ll, axis=1, keepdims=True)) @ q
+    return out
 
 
 def run_cell(p, q, N, rng, fitted=FITTED):
@@ -144,8 +154,9 @@ def run_cell(p, q, N, rng, fitted=FITTED):
     qb, lb = blind_w.index.to_numpy(), np.log(blind_w.to_numpy())
     preds["oracle_blind"] = bayes_predict(pairs[:, 0], pairs[:, 1], qb, lb[None, :])[inv]
     lam = N * pa
-    lp = (np.log(pa) + lm)[None, :] + pairs.sum(1)[:, None] * np.log(lam)[None, :] - lam[None, :]
-    preds["oracle"] = bayes_predict(pairs[:, 0], pairs[:, 1], qa, lp)[inv]
+    base, loglam, size = np.log(pa) + lm - lam, np.log(lam), pairs.sum(1)
+    preds["oracle"] = bayes_predict(pairs[:, 0], pairs[:, 1], qa,
+                                    lambda i: base[None, :] + size[i, None] * loglam[None, :])[inv]
 
     F1, F2 = int((nx == 1).sum()), int((nx == 2).sum())
     common = dict(N=N, GT_w01=(F1 + 2 * F2) / N, true_w01=float(p[nx <= 1].sum()))
