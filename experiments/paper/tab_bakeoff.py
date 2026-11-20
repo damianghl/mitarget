@@ -45,6 +45,9 @@ def cell(row, m):
     v, p = row[f"{m}: share"], row[f"{m}: p_holm"]
     if not np.isfinite(v):
         return "--"
+    # a share of a non-positive gain has no meaning (and flips sign): show only the significance mark
+    if row.baseline_gain <= 0:
+        return "n/a" + ("$^{*}$" if p < ALPHA else "")
     txt = f"{100 * v:+.0f}" if abs(v) >= 1 else f"{100 * v:+.1f}"
     return txt + ("$^{*}$" if p < ALPHA else "")
 
