@@ -7,7 +7,7 @@ tags below and writes ``tab_mi_sens.tex``:
 - grid of priors, 101 against 401 points (tags g101, g401s; same data sets);
 - the three-atom prior with atoms on and off the 101-point grid (atoms3, atoms3_off);
 - thinning cap, 200 against 1000 rows per level, on shuffled Avazu (cap200B/cap1000B; same data sets);
-- the lognormal-popularity cells at nbar >= 2 (tag lognormalB).
+- optionally, lognormal-popularity cells (tag lognormalB; too slow to run at nbar >= 2 with 1e5 levels).
 
     python tab_mi_sens.py RUNS_DIR
 """
