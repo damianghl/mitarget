@@ -4,7 +4,7 @@ Appendix table: bakeoff differences to the baseline in absolute milli-nats, with
 Reads ``table_paired.csv`` from ``experiments/realdata_tables.py`` (Nadeau-Bengio standard errors over the
 25 splits) and writes ``tab_bakeoff_abs.tex``: per task and method, the mean held-out log-loss difference
 to the baseline in milli-nats per test row, +- the half-width of a Bonferroni-corrected 95% interval over
-the 12 comparisons with the baseline on the task (t quantile with J - 1 degrees of freedom).
+the 11 comparisons with the baseline on the task (t quantile with J - 1 degrees of freedom).
 
     python tab_bakeoff_abs.py tables/table_paired.csv
 """
@@ -16,7 +16,7 @@ from scipy import stats
 from tab_bakeoff import METHODS, tex_name
 
 BASE = "K=1 baseline"
-N_COMP = 12
+N_COMP = 11   # comparisons with the baseline per task (scikit-learn's encoder is left out)
 
 
 def main():

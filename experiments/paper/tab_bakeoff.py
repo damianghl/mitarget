@@ -29,7 +29,7 @@ METHODS = [("Baseline + unseen correction", "+unseen"), ("Baseline + Robbins (n<
            ("NPMLE", "NPMLE"), ("NPMLE + Robbins (n<=1)", "NPMLE +Robbins"),
            ("Frequency prior", "freq.\\ prior"), ("GLMM", "GLMM mode"),
            ("GLMM (posterior mean)", "GLMM mean"), ("Fixed m=20", "$m{=}20$"),
-           ("CV m (LOO)", "CV $m$"), ("CatBoost TS (a=1)", "CatBoost TS")]
+           ("CV m (LOO)", "CV $m$"), ("CatBoost TS (a=1)", r"$m{=}1$ (CatBoost)")]
 # the main-text table leaves out CV m (it ties the baseline everywhere) and CatBoost TS (it loses on every
 # sparse feature); the appendix table keeps both
 METHODS_MAIN = METHODS[:-2]

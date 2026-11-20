@@ -1,5 +1,5 @@
 """
-Assumption-light statements about I(X;Y) on the full real features (K5 of the second simulated review).
+Statements about I(X;Y) on the full real features that do not assume exchangeability across level sizes.
 
 For every binary bakeoff task this writes one row with
 

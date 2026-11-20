@@ -57,7 +57,8 @@ ENCODERS = {
     "fixed_m20": dict(method="fixed_m", m=20.0),
     "catboost_ts": dict(method="catboost_ts"),
     # the encoder plus a count feature log(1 + n_x) per column, n_x counted on the outer train part
-    # (label-free, so no leakage): the usual practitioner's answer to popularity dependence
+    # (label-free, so no leakage; training rows leave themselves out): the usual practitioner's answer
+    # to popularity dependence
     "baseline_count": dict(method="baseline"),
     "npmle_count": dict(method="npmle"),
 }
@@ -96,11 +97,17 @@ def score(y, p) -> dict:
 
 
 def count_features(Xtr: pd.DataFrame, Xte: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
-    """log(1 + n_x) for every column, with n_x the level's count in ``Xtr`` (0 for unseen levels)."""
+    """log(1 + n_x) for every column, with n_x the number of other training rows in the level.
+
+    A test row's count is its level's count in ``Xtr`` (0 for unseen levels). A training row's count
+    leaves the row itself out (count - 1), so that a training row in a level of n rows looks like a
+    test row on a level seen n - 1 times: counting the row itself would match training singletons
+    to unseen test levels, the n versus n + 1 shift of the popularity analysis.
+    """
     ftr, fte = [], []
     for c in Xtr.columns:
         counts = Xtr[c].value_counts()
-        ftr.append(np.log1p(Xtr[c].map(counts).to_numpy(float)))
+        ftr.append(np.log1p(Xtr[c].map(counts).to_numpy(float) - 1.0))
         fte.append(np.log1p(Xte[c].map(counts).fillna(0).to_numpy(float)))
     return np.column_stack(ftr), np.column_stack(fte)
 

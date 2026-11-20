@@ -1,5 +1,5 @@
 """
-Main-text bakeoff table (M4 of the second simulated review): every method against the baseline over all 24
+Main-text bakeoff table: every method against the baseline over all 24
 tasks, in absolute and relative terms, with counts by task and by data source.
 
 Reads ``table_paired.csv`` and ``table_logloss.csv`` from ``experiments/realdata_tables.py`` and writes
@@ -7,7 +7,7 @@ Reads ``table_paired.csv`` and ``table_logloss.csv`` from ``experiments/realdata
 baseline (milli-nats per test row) and of the relative log-loss difference (% of the baseline's log-loss);
 median over the 9 data sources of each source's median difference; median share of the baseline's gain over
 the fixed set of 20 tasks; number of tasks and of sources (out of 9) with a significant improvement /
-degradation (corrected resampled t-test, Holm over the 12 comparisons with the baseline, p < 0.01).
+degradation (corrected resampled t-test, Holm over the 11 comparisons with the baseline, p < 0.01).
 
     python tab_bakeoff_summary.py table_paired.csv table_logloss.csv
 """

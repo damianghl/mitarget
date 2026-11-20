@@ -1,5 +1,5 @@
 """
-Fixed-smoothing sweep (K6 of the second simulated review), from ``experiments/fixed_m_sweep.py``.
+Fixed-smoothing sweep, from ``experiments/fixed_m_sweep.py``.
 
 fig_fixed_m.pdf   (a) oracle pools at nbar = 2: eCE of the m-estimate with m = c * s-hat minus
                   the baseline's, as a share of the oracle's gain, against log2(m / s-hat);
