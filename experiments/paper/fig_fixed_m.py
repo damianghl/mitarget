@@ -1,12 +1,14 @@
 """
 Fixed-smoothing sweep (K6 of the second simulated review), from ``experiments/fixed_m_sweep.py``.
 
-fig_fixed_m.pdf     (a) oracle pools at nbar = 2: eCE of the m-estimate with m = c * s-hat minus the baseline's,
-                    as a share of the oracle's gain, against log2(m / s-hat); (b) bakeoff: held-out log-loss of
-                    the same encoders minus the baseline's, as a share of the baseline's gain (median and
-                    interquartile range over the fixed set of 20 tasks), with the common default m = 20 per task
-tab_fixed_m.tex     per bakeoff task: median s-hat and CV m over the 25 training folds, and the held-out loss of
-                    m = 20 and m = 1 relative to the baseline, in milli-nats and as a share of the baseline's gain
+fig_fixed_m.pdf   (a) oracle pools at nbar = 2: eCE of the m-estimate with m = c * s-hat minus
+                  the baseline's, as a share of the oracle's gain, against log2(m / s-hat);
+                  (b) bakeoff: held-out log-loss of the same encoders minus the baseline's, as a
+                  share of the baseline's gain (median and interquartile range over the fixed set
+                  of 20 tasks), with the common default m = 20 per task
+tab_fixed_m.tex   per bakeoff task: median s-hat and CV m over the 25 training folds, and the
+                  held-out loss of m = 20 and m = 1 relative to the baseline, in milli-nats and
+                  as a share of the baseline's gain
 
     python fig_fixed_m.py --pools sweep/pools --tasks sweep/tasks --meta table_tasks.csv
 """
@@ -93,7 +95,8 @@ def main():
     rel = share.loc[fixed, [rel_name(c) for c in REL]] * 100
     med, q1, q3 = rel.median(), rel.quantile(0.25), rel.quantile(0.75)
     axes[1].fill_between(x, q1.values, q3.values, color=COLORS["baseline"], alpha=0.2, lw=0)
-    axes[1].plot(x, med.values, color=COLORS["baseline"], marker="o", ms=2.5, label=r"$m=c\,\hat s$ (median, IQR)")
+    axes[1].plot(x, med.values, color=COLORS["baseline"], marker="o", ms=2.5,
+                 label=r"$m=c\,\hat s$ (median, IQR)")
     s_med = sm.groupby(level=0).s_hat.median()
     for col, lab, mk in (("fixed_m20", r"$m=20$", "^"), ("fixed_m1", r"$m=1$", "v")):
         axes[1].scatter(np.log2(float(col[7:]) / s_med.loc[fixed]), 100 * share.loc[fixed, col],

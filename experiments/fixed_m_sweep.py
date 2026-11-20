@@ -13,7 +13,8 @@ differs from the baseline only by its m. Two designs:
            next to the marginal and full-oracle eCE.
 
     python experiments/fixed_m_sweep.py tasks --data-root DATA --out sweep_tasks/
-    python experiments/fixed_m_sweep.py pools --data movies.tsv --feature movie_id --nbar 1 2 5 --out sweep_pools/
+    python experiments/fixed_m_sweep.py pools --data movies.tsv --feature movie_id \
+        --nbar 1 2 5 --out sweep_pools/
 """
 
 from __future__ import annotations

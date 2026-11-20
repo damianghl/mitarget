@@ -13,7 +13,8 @@ For every binary bakeoff task this writes one row with
 - ``single_w``: that term's width, the singletons' row share times ``h`` of their label rate;
 - the baseline, NPMLE and plug-in point estimates, and the likelihood interval under exchangeability.
 
-    python experiments/mi_realdata_bounds.py --data-root DATA --logloss bake_tables/table_logloss.csv --out bounds.csv
+    python experiments/mi_realdata_bounds.py --data-root DATA \
+        --logloss bake_tables/table_logloss.csv --out bounds.csv
 """
 
 from __future__ import annotations
@@ -63,7 +64,8 @@ def task_bounds(task, best_ce, lik=True, max_l=MAX_L):
     nx, kx = n.sum(1), n[:, 1]
     N = nx.sum()
     mu = kx.sum() / N
-    row = dict(task=SHORT.get(task.label, task.label), N=int(N), H_Y=h(mu), F1_share=float((nx == 1).sum() / N))
+    row = dict(task=SHORT.get(task.label, task.label), N=int(N), H_Y=h(mu),
+               F1_share=float((nx == 1).sum() / N))
     lo_eh = hi_eh = 0.0
     for a, b in BINS:
         s = (nx >= a) & (nx <= b)
@@ -98,7 +100,8 @@ def main(argv=None):
     ap.add_argument("--logloss", type=Path, required=True, help="table_logloss.csv of realdata_tables.py")
     ap.add_argument("--no-lik", action="store_true")
     ap.add_argument("--max-l", type=int, default=MAX_L, help="moments per size group")
-    ap.add_argument("--lik-max-rows", type=int, default=500_000, help="likelihood interval only below this size")
+    ap.add_argument("--lik-max-rows", type=int, default=500_000,
+                    help="likelihood interval only below this size")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
     ll = pd.read_csv(a.logloss)
@@ -112,7 +115,8 @@ def main(argv=None):
                 continue
             t0 = time.time()
             label = SHORT.get(task.label, task.label)
-            rows.append(task_bounds(task, best.get(label), lik=not a.no_lik and task.n <= a.lik_max_rows, max_l=a.max_l))
+            lik = not a.no_lik and task.n <= a.lik_max_rows
+            rows.append(task_bounds(task, best.get(label), lik=lik, max_l=a.max_l))
             print(f"{task.label}: {time.time() - t0:.0f}s", flush=True)
             pd.DataFrame(rows).to_csv(a.out, index=False)
 

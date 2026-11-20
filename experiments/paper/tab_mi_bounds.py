@@ -27,14 +27,17 @@ def main():
     a = ap.parse_args()
     d = pd.read_csv(a.bounds).sort_values("task")
     lines = [r"\begin{tabular}{l r r r r r r r r}", r"\toprule",
-             r"feature & $F_1/N$ & pred.\ bound & stratified & assumption-light & singletons & baseline & NPMLE"
+             r"feature & $F_1/N$ & pred.\ bound & stratified & assumption-light & singletons"
+             r" & baseline & NPMLE"
              r" & lik.\ (exch.)\\", r"\midrule"]
     for _, r in d.iterrows():
         lo = np.nanmax([r.strat_lo, r.pred_lb, 0.0])
         lik = "--" if pd.isna(r.get("lik_lo")) else f"[{r.lik_lo:.3f}, {r.lik_hi:.3f}]"
         lines.append(" & ".join([
-            tex_name(r.task), f"{r.F1_share:.2f}", f3(r.pred_lb), f"[{max(r.strat_lo, 0):.3f}, {r.strat_hi:.3f}]",
-            f"[{lo:.3f}, {r.strat_hi:.3f}]", f3(r.get("single_w", np.nan) if not pd.isna(r.get("single_w")) else 0.0),
+            tex_name(r.task), f"{r.F1_share:.2f}", f3(r.pred_lb),
+            f"[{max(r.strat_lo, 0):.3f}, {r.strat_hi:.3f}]",
+            f"[{lo:.3f}, {r.strat_hi:.3f}]",
+            f3(0.0 if pd.isna(r.get("single_w")) else r.get("single_w")),
             f3(r.I_baseline), f3(r.I_npmle), lik]) + r"\\")
     lines += [r"\bottomrule", r"\end{tabular}"]
     with open(a.tab, "w") as f:

@@ -37,7 +37,8 @@ def main():
     p["sig"] = np.where(p.p_nb_holm < 0.01, np.sign(p["diff"]), 0)
     lines = [r"\begin{tabular}{l r r r r r r}", r"\toprule",
              r" & \multicolumn{2}{c}{median over 24 tasks} & median over & median \% of & tasks & sources\\",
-             r"method & mnats & rel.\ \% & 9 sources (mnats) & gain (20 tasks) & better/worse & better/worse\\",
+             r"method & mnats & rel.\ \% & 9 sources (mnats) & gain (20 tasks)"
+             r" & better/worse & better/worse\\",
              r"\midrule"]
     for m, lab in METHODS:
         d = p[p.method == m]

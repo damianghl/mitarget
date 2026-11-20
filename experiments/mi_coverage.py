@@ -216,7 +216,9 @@ def main(argv=None):
         tasks = [(name, a.shuffle, p, q, nbar, rep, a.seed, a.slack, a.max_L, a.lik_only) for nbar in nbars
                  for rep in range(a.reps)]
         fn = _oracle_task
-        path = a.out / f"mi_coverage_{name}_{'shuffled' if a.shuffle else 'real'}{'_' + a.tag if a.tag else ''}.csv"
+        kind = "shuffled" if a.shuffle else "real"
+        suffix = "_" + a.tag if a.tag else ""
+        path = a.out / f"mi_coverage_{name}_{kind}{suffix}.csv"
         print(f"{name}{' (shuffled)' if a.shuffle else ''}: K={len(p)} levels", flush=True)
     if a.lik_only:
         prefix = "base_coverage_" if a.lik_only == "baselines" else "lik_coverage_"
