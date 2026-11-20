@@ -128,3 +128,20 @@ paper's Table `tab:id` (`K = 10^4, 10^5` levels, uniform or lognormal popularity
 pools are those of `realdata_oracle.py`, real and shuffled. Each row also has the identified
 interval at the population's own moments (`id_lo`, `id_hi`), the width that remains with exact
 moments up to the same `L`.
+
+## Second simulated review (2026-11-20)
+
+```bash
+# fixed-smoothing sweep: s-hat, CV m and m-estimates on a grid of fixed and relative m (K6)
+python experiments/fixed_m_sweep.py tasks --data-root DATA --out sweep_tasks/
+python experiments/fixed_m_sweep.py pools --data ml1m_ratings.tsv --feature movie_id --nbar 0.5 1 2 5 --out sweep_pools/
+python experiments/paper/fig_fixed_m.py --pools sweep_pools/ --tasks sweep_tasks/ --meta table_tasks.csv --logloss table_logloss.csv
+# assumption-light statements about I(X;Y) on the full real features (K5)
+python experiments/mi_realdata_bounds.py --data-root DATA --logloss table_logloss.csv --lik-max-rows 100000 --out bounds.csv
+python experiments/paper/tab_mi_bounds.py bounds.csv
+# bakeoff summary by task and by source (M4)
+python experiments/paper/tab_bakeoff_summary.py table_paired.csv table_logloss.csv
+# likelihood-interval sensitivity: grid size, thinning cap, off-grid atoms (M3)
+python experiments/mi_coverage.py synthetic --lik-only --priors atoms3 atoms3_off beta_1_3 junk_f0.5 --pools "10000|uniform" --nbar 1 5 --reps 50 --lik-grid 401 --tag g401 --out mi_sens/
+python experiments/mi_coverage.py oracle --lik-only --data ml1m_ratings.tsv --feature movie_id --shuffle --nbar 5 20 --reps 30 --n-cap 1000 --tag cap1000 --out mi_sens/
+```

@@ -61,6 +61,8 @@ PRIORS = {
     "junk_f0.5": ("atoms", ([0.1, 0.5, 0.9], [0.25, 0.5, 0.25])),
     "junk_f0.8": ("atoms", ([0.1, 0.5, 0.9], [0.1, 0.8, 0.1])),
     "atoms3": ("atoms", ([0.2, 0.3, 0.85], [0.3, 0.4, 0.3])),
+    # the same prior with atoms off the 101-point grid of the likelihood interval (sensitivity check)
+    "atoms3_off": ("atoms", ([0.2037, 0.3061, 0.8529], [0.3, 0.4, 0.3])),
     "beta_0.5_0.5": ("beta", (0.5, 0.5)),
     "beta_1_3": ("beta", (1.0, 3.0)),
 }
@@ -83,10 +85,14 @@ def draw_p(popularity, K, rng):
     return w / w.sum()
 
 
+#: grid size and thinning cap of the likelihood interval (``--lik-grid``, ``--n-cap``)
+LIK_OPTS = {}
+
+
 def likelihood_columns(n):
     t0 = time.perf_counter()
     try:
-        lk = mi_interval(n, region="likelihood")
+        lk = mi_interval(n, region="likelihood", **LIK_OPTS)
         row = dict(lik_lo=lk.lower, lik_hi=lk.upper)
     except ValueError:
         row = dict(lik_lo=np.nan, lik_hi=np.nan)
@@ -185,9 +191,12 @@ def main(argv=None):
                     help="only the likelihood interval, on the same data sets (lik_coverage_*.csv)")
     ap.add_argument("--baselines-only", action="store_true",
                     help="redraw the same data sets and compute only the classical MI estimators")
-    ap.add_argument("--tag", default=None, help="synthetic: suffix of the output file (default: none)")
+    ap.add_argument("--lik-grid", type=int, default=101, help="grid size of the likelihood interval")
+    ap.add_argument("--n-cap", type=int, default=200, help="levels above this size are thinned to it")
+    ap.add_argument("--tag", default=None, help="suffix of the output file (default: none)")
     ap.add_argument("--out", type=Path, required=True, help="output folder")
     a = ap.parse_args(argv)
+    LIK_OPTS.update(lik_grid_size=a.lik_grid, n_cap=a.n_cap)
     a.out.mkdir(parents=True, exist_ok=True)
     if a.baselines_only:
         a.lik_only = "baselines"
@@ -207,7 +216,7 @@ def main(argv=None):
         tasks = [(name, a.shuffle, p, q, nbar, rep, a.seed, a.slack, a.max_L, a.lik_only) for nbar in nbars
                  for rep in range(a.reps)]
         fn = _oracle_task
-        path = a.out / f"mi_coverage_{name}_{'shuffled' if a.shuffle else 'real'}.csv"
+        path = a.out / f"mi_coverage_{name}_{'shuffled' if a.shuffle else 'real'}{'_' + a.tag if a.tag else ''}.csv"
         print(f"{name}{' (shuffled)' if a.shuffle else ''}: K={len(p)} levels", flush=True)
     if a.lik_only:
         prefix = "base_coverage_" if a.lik_only == "baselines" else "lik_coverage_"
