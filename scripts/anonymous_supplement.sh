@@ -37,7 +37,7 @@ grep -rIl "mitarget" "$top" | xargs -r sed -i "s/mitarget/$name/g"
 if [ -n "$results" ]; then
     cp -r "$results" "$top/results"
 fi
-if grep -rIn -i -E "damian|damianghl|ib\.edu|balseiro|mitarget|github\.com/" "$top"; then
+if grep -rIn -i -E "dami[aá]n|damianghl|ib\.edu|balseiro|mitarget|github\.com/" "$top"; then
     echo "identifying strings left in the supplement (above); fix before submitting" >&2
     exit 1
 fi

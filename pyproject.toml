@@ -9,7 +9,7 @@ description = "Empirical-Bayes target encoding and mutual-information estimation
 readme = "README.md"
 license = { text = "BSD-3-Clause" }
 requires-python = ">=3.10"
-authors = [{ name = "Damian G. Hernandez" }]
+authors = [{ name = "Damián G. Hernández" }]
 classifiers = [
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
