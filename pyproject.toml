@@ -7,9 +7,13 @@ name = "mitarget"
 version = "0.1.0"
 description = "Empirical-Bayes target encoding and mutual-information estimation for large, under-sampled categorical features"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = { text = "BSD-3-Clause" }
 requires-python = ">=3.10"
 authors = [{ name = "Damian G. Hernandez" }]
+classifiers = [
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+]
 dependencies = [
     "numpy>=1.23",
     "scipy>=1.9",

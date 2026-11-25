@@ -29,6 +29,7 @@ git -C "$root" archive --format=tar --prefix="$name/" HEAD | tar -x -C "$tmp"
 top="$tmp/$name"
 rm -f "$top/scripts/anonymous_supplement.sh"
 sed -i 's/^authors = .*/authors = [{ name = "Anonymous" }]/' "$top/pyproject.toml"
+sed -i 's/^Copyright (c) \(.*\), .*/Copyright (c) \1, Anonymous Authors/' "$top/LICENSE"
 sed -i 's| (damianghl/mitarget-paper)||' "$top/experiments/paper/README.md"
 # rename the package: directory, imports, docs
 mv "$top/src/mitarget" "$top/src/$name"
