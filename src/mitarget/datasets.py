@@ -137,7 +137,7 @@ def load_click_prediction(path, cat_col: str = "user_id") -> CategoricalTask:
                  f"click_prediction_small / {cat_col}")
 
 
-#: Default file names, as in the original ``code_new.zip`` ``data/`` folder.
+#: Default file names of the OpenML ARFF exports (IDs 42125, 40701, 1169, 1220).
 DATA_FILES = {
     "employee_salaries": "employee_salaries.arff",
     "churn": "churn.arff",
