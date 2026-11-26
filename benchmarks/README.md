@@ -1,7 +1,7 @@
 # Benchmarks
 
-Two scripts reproduce the experiments of the original notebooks
-(`mutual_information_project.ipynb` and `encoder_bakeoff.ipynb` in `code_new.zip`).
+Two scripts with the package's first synthetic and real-data benchmarks. They predate the
+paper; its experiments are in `experiments/`.
 Both print a summary per scenario or task and, with `--out DIR`, write raw and
 summary CSVs.
 
@@ -37,7 +37,8 @@ or only the CatBoost classifier with `--no-catboost`.
 
 ## Real data
 
-The ARFF files are the ones in `code_new.zip/code/data/` (OpenML exports). They
+The ARFF files are OpenML exports of `employee_salaries` (ID 42125), `churn` (40701), a 5% sample of
+`airlines` (1169) and `Click_prediction_small` (1220), saved under the names in `mitarget.datasets.DATA_FILES`. They
 are not committed; copy them into `data/` (git-ignored) or pass any folder:
 
 ```bash

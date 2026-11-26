@@ -1,7 +1,18 @@
 # Paper figures and tables
 
-Scripts behind the figures and tables of the manuscript (damianghl/mitarget-paper). Outputs are copied
-into the paper repo's `figures/` and `tables/`. Data are not committed (licences); paths are arguments.
+Scripts behind the figures and tables of the paper. Data are not committed (licences); paths are arguments.
+
+To rebuild every table and figure from the released result files, without rerunning the experiments,
+download `results.zip` from the package's v0.1.0 release, unzip it, and run from the repository root
+
+```bash
+pip install -e ".[plots]"
+python experiments/paper/make_all.py --results results/ --out paper_out/ --with-synthetic
+```
+
+This takes about two minutes. All 18 `.tex` tables come out byte-identical to the paper's (`--check
+PAPER/tables` compares them). `fig_teaser.pdf` also needs the prepared pool files (`--pools-dir`). The
+table below lists each script, and `results/README.md` lists where each result file came from.
 
 | output | paper | script | input |
 |---|---|---|---|
@@ -9,6 +20,7 @@ into the paper repo's `figures/` and `tables/`. Data are not committed (licences
 | `fig_interval.pdf` | Fig. `fig:interval` (Sec. 6) | `python fig_interval.py` | none (moment LPs) |
 | `junk_fraction.csv`, `_summary.csv` | Sec. 7.1 | `python run_junk_fraction.py --reps 40 --out junk_fraction.csv` | synthetic |
 | `fig_junk.pdf` | Fig. `fig:junk` (Sec. 7.1) | `python fig_junk.py junk_fraction_summary.csv` | sweep above |
+| `tab_downstream.tex` | Tab. `tab:downstream` (App. `app:downstream`) | `python tab_downstream.py <downstream_amazon dir>` | the three `downstream_amazon_summary.csv` of `../downstream_amazon.py` (main run, `count_glmm_mean/`, `count_loo/`) |
 | `fig_oracle.pdf`, `fig_gap_by_n.pdf`, `tab_oracle.tex`, `tab_oracle_gaps.tex` | Sec. 7.2 | `python fig_oracle.py <tables dir>` | `summary.csv`, `paired.csv`, `baseline_gap_by_n.csv` from `../realdata_oracle_tables.py` |
 | `fig_mi_coverage.pdf`, `tab_mi_coverage.tex` | Sec. 8 | `python fig_mi_coverage.py <tables dir>/summary.csv` | `summary.csv` from `../mi_coverage_tables.py` |
 | `tab_mi_point.tex` | Tab. `tab:mi-point` (App. `app:mi-point`) | `python tab_mi_point.py <tables dir>/summary.csv` | `summary.csv` from `../mi_coverage_tables.py` |
@@ -17,7 +29,7 @@ into the paper repo's `figures/` and `tables/`. Data are not committed (licences
 | `tab_exch_pools.tex`, `tab_exch_tasks.tex` | Tabs. `tab:exch-pools`, `tab:exch-tasks` (App. `app:exch`) | `python tab_exch.py <exch tables>/exch_pools_summary.csv <exch raw>/exch_tasks.csv` | `exch_pools_summary.csv` from `../exchangeability.py summary --coverage`, `exch_tasks.csv` from `../exchangeability.py tasks` |
 | `fig_teaser.pdf` | Fig. `fig:teaser` (Sec. 1) | `python fig_teaser.py --by-n <tables dir>/table_by_n.csv --pools movie_id=ml1m_ratings.tsv:movie_id bx_user_implicit=bx_user_implicit.tsv avazu_device_ip=avazu_device_ip.tsv` | `table_by_n.csv` from `../realdata_tables.py`, prepared pool `.tsv` files |
 | large-n regret table | Tab. `tab:largen` (App. `app:gap`) | `python large_n_regret.py` | none (exact sums) |
-| GLMM Laplace vs AGQ | Tab. `tab:glmm` (App. `app:glmm`) | `python glmm_laplace.py --arff-dir code/data --avazu avazu_train_4M.csv.gz` | OpenML ARFF exports, raw Avazu |
+| GLMM Laplace vs AGQ | Tab. `tab:glmm` (App. `app:glmm`) | `python glmm_laplace.py --arff-dir arff/ --avazu avazu_train_4M.csv.gz` | OpenML ARFF exports, raw Avazu |
 | theory checks | Tabs. `tab:regret`, `tab:avg`, `tab:id`; MC check of Prop. `prop:ml` | `python theory/verify.py`, `python theory/pseudo_true.py`, `python theory/unseen_mi_bounds.py` | none (`verify.py` needs `sympy`) |
 
 The MI coverage input comes from `experiments/mi_coverage.py` (see `experiments/README.md`). The oracle and bakeoff inputs come from `experiments/realdata_oracle.py` and

@@ -2,7 +2,7 @@
 Synthetic scenarios 1-4: MI error and excess cross-entropy of every method,
 against Bayes oracles where the true generative family is known.
 
-    python benchmarks/synthetic_scenarios.py            # settings of the original notebook
+    python benchmarks/synthetic_scenarios.py            # default settings
     python benchmarks/synthetic_scenarios.py --fast     # quick smoke run
     python benchmarks/synthetic_scenarios.py --scenarios 4 --out results/
 """

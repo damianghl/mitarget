@@ -27,7 +27,7 @@ def _task(label: str, xs, y) -> CategoricalTask:
 
 
 def openml(root: Path) -> Iterator[CategoricalTask]:
-    """The four OpenML ARFF exports of the original bake-off (``code_new.zip:code/data``)."""
+    """The four OpenML ARFF exports of the bakeoff (IDs 42125, 40701, 1169 as a 5% sample, 1220)."""
     f = datasets.DATA_FILES
     yield datasets.load_employee_salaries(root / f["employee_salaries"])
     yield datasets.load_churn(root / f["churn"])

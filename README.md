@@ -1,53 +1,87 @@
 # mitarget
 
-Empirical-Bayes target encoding, classification and mutual-information
-estimation for **large, under-sampled categorical features**: many categories,
-most seen only a handful of times, and a target with few, well-sampled classes.
+Empirical-Bayes target encoding and mutual-information estimation for **large, under-sampled
+categorical features**: user, device or product identifiers with many levels, most of them seen
+zero, one or two times, and a binary (or few-class) target.
 
-The core estimator is the one of Hernandez & Samengo (2019),
-[*Estimating the Mutual Information between Two Discrete, Asymmetric Variables
-with Limited Samples*](https://doi.org/10.3390/e21060623), Entropy 21(6):623.
-Each category's conditional distribution gets the prior
+Each level's target rate `q_x` gets a prior fitted to the whole feature, and the encoding is its
+posterior mean. With a beta prior this is the classic smoothed encoding
+`(k_x + m * mu) / (n_x + m)` (Micci-Barreca 2001), with `m` **fitted by marginal likelihood instead of
+fixed**. The package also has richer priors (nonparametric NPMLE, random-intercept GLMM, a
+frequency-aware prior), corrections for levels whose rate depends on their popularity, and point
+estimates and intervals for the information `I(X;Y)` the feature carries.
 
-    q(y | x) ~ Dirichlet(beta * q(y))
+<!-- public -->
+The methods and their theory are in the paper *When is simple target encoding optimal? Moment
+exactness for sparse categorical features, and the limits of estimating their information*
+(Damián G. Hernández, 2026; see [Citation](#citation)). `experiments/` reproduces every table and
+figure in it.
+<!-- /public -->
 
-and the concentration `beta` is fit by maximizing the marginal likelihood. The
-posterior mean
+## Install
 
-    qhat(y | x) = (n_xy + beta * q(y)) / (n_x + beta)
+Python 3.10 or later.
 
-is classic smoothed target encoding (Micci-Barreca 2001) with the pseudo-count
-learned from coincidences in the data instead of hand-picked.
+<!-- public -->
+```bash
+pip install "mitarget @ git+https://github.com/damianghl/mitarget@v0.1.0"
+```
 
-## Estimators
+or from a clone:
+<!-- /public -->
 
-| `method` | Model | Fit |
+```bash
+pip install -e .                 # numpy, scipy, pandas, scikit-learn
+pip install -e ".[lik]"          # + cvxpy, for the likelihood-region MI interval
+pip install -e ".[plots]"        # + matplotlib, for the paper's figures
+pip install -e ".[catboost]"     # + catboost, for the CatBoost comparisons
+pip install -e ".[dev]"          # + pytest, ruff, cvxpy
+```
+
+## Quick start
+
+```python
+import numpy as np, pandas as pd
+from mitarget import BayesianTargetEncoder, counts_from_labels, fit_counts, mi_interval
+
+# Encode categorical columns for a downstream model.
+enc = BayesianTargetEncoder(method="baseline")     # or "npmle", "freq_prior", "glmm_mean", ...
+X_enc = enc.fit_transform(X_cat, y)                # out-of-fold encodings for the training rows
+X_test_enc = enc.transform(X_cat_test)             # unseen levels get the prior mean
+
+# Work on one feature's level-by-class count matrix.
+n = counts_from_labels(x_codes, y)                 # (levels, classes)
+fit = fit_counts(n, method="npmle")
+fit.encoding                                       # (levels, classes) posterior-mean encoding
+fit.I_hat                                          # point estimate of I(X;Y), nats
+r = mi_interval(n)                                 # r.lower, r.upper: interval for I(X;Y)
+```
+
+`BayesianCategoricalClassifier` predicts `y` from a single feature, and `mutual_information(x, y,
+method=...)` returns the MI estimate directly.
+
+## Encoders
+
+`fit_counts(n, method)` and the `method=` argument of the scikit-learn wrappers:
+
+| `method` | Prior or rule | Fit |
 |---|---|---|
-| `"baseline"` | one shared `beta` | empirical Bayes (1-D optimization) |
-| `"baseline_unseen"` | the baseline, but unseen categories get the label rate of categories seen once (`singleton_rate`) | as baseline |
-| `"baseline_robbins"` | `"baseline_unseen"`, and categories seen once get the label rate of the other row in doubletons sharing their label (`doubleton_rates`), when a likelihood-ratio test on the doubletons rejects the baseline (`doubleton_test`; `"baseline_robbins_raw"` always) | as baseline |
-| `"mixture"` | `K` clusters of categories, each with its own `beta_c` | EM with restarts |
-| `"crp"` | Chinese Restaurant Process over clusters, self-tuning concentration | collapsed Gibbs |
-| `"fixed_m"` | additive smoothing with fixed `m` (default 20) | none, for comparison |
-| `"plugin"` | raw frequencies | none, for comparison |
-| `"glmm"` | random-intercept logistic GLMM, `logit q_x = b0 + u_x` (Pargent et al. 2022) | Laplace marginal likelihood, as lme4 |
-| `"npmle"` | nonparametric prior for `q_x` on a grid (Kiefer-Wolfowitz) | EM |
-| `"catboost_ts"` | CatBoost target statistic at prediction time, `(n_xy + q_y) / (n_x + 1)` | none, for comparison |
-| `"freq_prior"` | beta prior whose mean depends on the category's count, `logit mu_x = a + b log(1 + n_x)` (binary `y`) | type-II ML, used only if a likelihood-ratio test rejects `b = 0` |
+| `"baseline"` | one beta (Dirichlet) prior, mean at the label rate | `m` by type-II maximum likelihood |
+| `"baseline_unseen"` | baseline; unseen levels get the label rate of levels seen once | as baseline |
+| `"baseline_robbins"` | baseline; levels seen at most once read off the singleton and doubleton counts (Robbins), when a test on the doubletons rejects the baseline (`"baseline_robbins_raw"`: always) | as baseline |
+| `"npmle"` | nonparametric prior on a grid (Kiefer-Wolfowitz) | EM; `"npmle_robbins"` adds the Robbins step |
+| `"freq_prior"` | beta prior whose mean depends on the level's count | type-II ML, kept only if a likelihood-ratio test rejects a constant mean |
+| `"glmm"`, `"glmm_mean"` | random-intercept logistic GLMM (Pargent et al. 2022), predicted at the conditional mode or the posterior mean | adaptive Gauss-Hermite quadrature |
+| `"cv_m"` | smoothed encoding with `m` chosen by cross-validated log-loss | grid search |
+| `"fixed_m"`, `"plugin"` | fixed `m` (default 20); raw frequencies | none, for comparison |
+| `"catboost_ts"` | CatBoost's prediction-time target statistic, `m = 1` | none, for comparison |
+| `"mixture"`, `"crp"` | `K` clusters of levels, each with its own beta; Chinese-restaurant-process mixture | EM; collapsed Gibbs (experimental, not in the paper) |
 
-Every estimator handles any number of target classes; `"glmm"`, `"npmle"` and
-`"freq_prior"` are binary models fit one-vs-rest for `ky > 2`. `ordered_target_statistics`
-gives CatBoost's ordered encoding of training rows, and
-`catboost_classifier_encoding` the full CatBoost classifier on one feature
-(`pip install -e ".[catboost]"`).
+The beta-based estimators handle any number of classes; `"glmm"`, `"npmle"` and `"freq_prior"` are
+binary models fitted one-vs-rest for more classes. `stratum_moment_test` tests whether levels of
+different sizes share one prior (exchangeability).
 
-When the target rate depends on how popular a category is, the frequency prior
-recovers most of the gap to the oracle. The encoding reads the fitted curve at
-`n_x + 1`, since the right prior for a category seen `n` times is the law of
-`q` among categories seen `n + 1` times; unseen categories therefore get
-roughly the label rate of singletons. The MI estimate uses the curve at `n_x`.
-
-## Mutual information: point estimate and identified interval
+## Mutual information
 
 Categories seen at most `L` times identify only the first `L` moments of the
 prior of `q(y=1 | x)`, so `I(X;Y)` is only partially identified: singletons
@@ -76,57 +110,50 @@ narrows the sampling part of the width; the identified part stays (needs
 `identified_interval(moments)` gives the population interval for known
 moments, and `worst_case_halfwidth(L)` the bound `E_L(h)`.
 
-## Install
+## Reproducing the paper
+
+`experiments/` has every experiment script, and `experiments/paper/` the scripts that turn their
+outputs into the paper's tables and figures. The result files of the paper's runs are in `results.zip`
+<!-- public -->
+on the [v0.1.0 release](https://github.com/damianghl/mitarget/releases/tag/v0.1.0)
+<!-- /public -->
+(85 MB unpacked). To rebuild every table and figure from them, about two minutes:
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[plots]"
+unzip results.zip
+python experiments/paper/make_all.py --results results/ --out paper_out/ --with-synthetic
 ```
 
-## Usage
-
-```python
-from mitarget import BayesianTargetEncoder, BayesianCategoricalClassifier, mutual_information
-
-# Encode categorical columns for a downstream model (out-of-fold in fit_transform).
-enc = BayesianTargetEncoder(method="baseline")
-X_enc = enc.fit_transform(X_cat, y)          # binary y: one column per feature
-X_test_enc = enc.transform(X_cat_test)       # unseen categories get the prior q(y)
-
-# Predict y from one categorical feature directly.
-clf = BayesianCategoricalClassifier(method="mixture", n_components=2).fit(x, y)
-proba = clf.predict_proba(x_test)
-clf.mutual_information_                      # MI estimate in nats
-
-# Or estimate I(X;Y) on its own.
-mutual_information(x, y, method="baseline")
-```
-
-Lower-level functions work on a `(kx, ky)` count matrix: `fit_baseline`,
-`fit_finite_mixture`, `fit_crp_mixture`, or `fit_counts(n, method)`.
+To rerun the experiments themselves, see `experiments/README.md`: the commands, run times and the
+expected layout of the data. The data sets (MovieLens 1M, Book-Crossing, Criteo 1TB, Avazu, Amazon
+employee access, four OpenML data sets) are not redistributed; the paper's appendix lists their sources
+and terms. Large sweeps run fastest with `OMP_NUM_THREADS=1` and `--jobs`.
 
 ## Layout
 
 ```
 src/mitarget/
   core.py            Dirichlet-multinomial likelihood, posterior means, entropies
-  baseline.py        single-beta empirical-Bayes estimator
-  finite_mixture.py  K-component mixture (EM)
-  crp.py             CRP mixture (collapsed Gibbs, Escobar-West alpha updates)
-  competitors.py     GLMM, NPMLE and CatBoost encoders from the literature
-  freq_prior.py      frequency-aware prior (prior mean depends on the category's count)
-  mi_interval.py     moment-identified interval for I(X;Y)
-  encoders.py        scikit-learn encoder and classifier
+  baseline.py        beta-prior estimator, unseen and Robbins corrections, CV m
+  competitors.py     NPMLE, GLMM and CatBoost encoders
+  freq_prior.py      frequency-aware prior
+  exchangeability.py stratum moment test
+  mi_interval.py     identified, moment and likelihood-region intervals for I(X;Y); credible interval
+  encoders.py        fit_counts, scikit-learn encoder and classifier
+  finite_mixture.py, crp.py   K-mixture and CRP-mixture priors (experimental)
   metrics.py         exact MI, excess cross-entropy, held-out log-loss
-  datasets.py        ARFF reader and real-data loaders
-  benchmark.py       evaluation harness shared by the scripts
-  synthetic/         generative model, scenarios 1-4, Bayes oracles
-benchmarks/          synthetic and real-data benchmark scripts (see benchmarks/README.md)
+  datasets.py, benchmark.py   data loaders and evaluation harness
+  synthetic/         generative models and Bayes oracles
+experiments/         the paper's experiments (README.md) and, in paper/, its tables and figures
+benchmarks/          earlier synthetic and real-data benchmarks
 tests/
 ```
 
 ## Tests
 
 ```bash
+pip install -e ".[dev]"
 pytest -q
 ruff check .
 ```
@@ -134,3 +161,23 @@ ruff check .
 ## License
 
 BSD-3-Clause, see [LICENSE](LICENSE).
+<!-- public -->
+
+## Citation
+
+If you use mitarget, please cite the paper:
+
+```bibtex
+@misc{hernandez2026targetencoding,
+  title  = {When is simple target encoding optimal? Moment exactness for sparse categorical
+            features, and the limits of estimating their information},
+  author = {Hern{\'a}ndez, Dami{\'a}n G.},
+  year   = {2026},
+  note   = {Preprint}
+}
+```
+
+The estimator builds on D. G. Hernández and I. Samengo, [Estimating the mutual information between two
+discrete, asymmetric variables with limited samples](https://doi.org/10.3390/e21060623), *Entropy*
+21(6):623, 2019.
+<!-- /public -->

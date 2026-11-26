@@ -30,7 +30,8 @@ top="$tmp/$name"
 rm -f "$top/scripts/anonymous_supplement.sh"
 sed -i 's/^authors = .*/authors = [{ name = "Anonymous" }]/' "$top/pyproject.toml"
 sed -i 's/^Copyright (c) \(.*\), .*/Copyright (c) \1, Anonymous Authors/' "$top/LICENSE"
-sed -i 's| (damianghl/mitarget-paper)||' "$top/experiments/paper/README.md"
+# drop the README blocks that name the author, the paper or the public repository
+sed -i '/<!-- public -->/,/<!-- \/public -->/d' "$top/README.md"
 # rename the package: directory, imports, docs
 mv "$top/src/mitarget" "$top/src/$name"
 grep -rIl "mitarget" "$top" | xargs -r sed -i "s/mitarget/$name/g"

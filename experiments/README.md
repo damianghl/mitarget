@@ -66,7 +66,7 @@ of the test row's level.
 
 | group | path | source |
 |---|---|---|
-| `openml` | `arff/` | the four ARFF exports in `code_new.zip:code/data` |
+| `openml` | `arff/` | ARFF exports of OpenML 42125, 40701, 1169 (5% sample) and 1220, named as in `mitarget.datasets.DATA_FILES` |
 | `movielens` | `movielens/ml1m_ratings.tsv` | MovieLens 1M ratings, y = rating >= 4 |
 | `amazon` | `amazon_employee_access/train.csv` | Kaggle Amazon Employee Access |
 | `bx` | `book_crossing/BX-*.csv` | Book-Crossing CSV dump; y = rating >= 8 (explicit) or explicit vs implicit |
